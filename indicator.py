@@ -3,7 +3,7 @@ import pymysql
 from datetime import datetime
 import numpy as np
 import time
-from CTA_main import get_commission_signal
+from CTA import get_commission_signal
 from dateutil.relativedelta import relativedelta
 
 def currentTime_forward_delta(currentTime, min_deltaTime):
@@ -55,8 +55,9 @@ def get_max_drawdown(total_return, datetime_focused, start_time, end_time):
     dd_end_idx = np.argwhere(dd_array == max_dd)[0][0]
     dd_start_idx = np.argwhere(return_for_unitTime_cum==cum_max[dd_end_idx])[0][0]
 
-
-    return max_drawdown
+    dd_startTime = unitTime_list[dd_start_idx]
+    dd_endTime = unitTime_list[dd_end_idx]
+    return max_drawdown,dd_start_idx,dd_end_idx
 
 def get_total_turnover(position_contract1,position_contract2,period):
     position_signal1 = get_commission_signal(position_contract1, period)

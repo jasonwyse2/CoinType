@@ -104,9 +104,6 @@ def quick_datetime_symbol(start_time, end_time,db_table):
     # read codes from database and save as dataframe
     datetime_open = get_unique_datetime(start_time,end_time,db_table)
     datetime_high,datetime_close,datetime_low = datetime_open,datetime_open,datetime_open
-
-    # instrument_open = get_unique_datetime(start_time, end_time,db_table)
-    # instrument_high, instrument_close, instrument_low = instrument_open,instrument_open,instrument_open
     instrument = get_unique_datetime(start_time, end_time, db_table)
     volume = get_unique_datetime(start_time,end_time,db_table)
     for coin_Type in coinType_list:
@@ -120,8 +117,6 @@ def quick_datetime_symbol(start_time, end_time,db_table):
         contract_timeType = 'week'
         [datetime_open, datetime_high, datetime_close, datetime_low]\
             =add_contract_price(df_week, contract_timeType, coin_Type, datetime_open, datetime_high, datetime_close, datetime_low)
-        # [instrument_open, instrument_high, instrument_close, instrument_low] \
-        #     = add_contract_instrument(df_week, contract_timeType, coin_Type, instrument_open, instrument_high, instrument_close, instrument_low)
         instrument = add_contract_instrument(df_week, contract_timeType, coin_Type, instrument)
         volume = add_contract_volume(df_week,contract_timeType,coin_Type,volume)
 
@@ -129,8 +124,6 @@ def quick_datetime_symbol(start_time, end_time,db_table):
         contract_timeType = 'nextweek'
         [datetime_open, datetime_high, datetime_close, datetime_low] \
             = add_contract_price(df_nextweek, contract_timeType, coin_Type, datetime_open, datetime_high, datetime_close, datetime_low)
-        # [instrument_open, instrument_high, instrument_close, instrument_low] \
-        #     = add_contract_instrument(df_nextweek, contract_timeType, coin_Type, instrument_open, instrument_high, instrument_close, instrument_low)
         instrument = add_contract_instrument(df_nextweek, contract_timeType, coin_Type, instrument)
         volume = add_contract_volume(df_nextweek, contract_timeType, coin_Type, volume)
 
@@ -139,13 +132,10 @@ def quick_datetime_symbol(start_time, end_time,db_table):
         [datetime_open, datetime_high, datetime_close, datetime_low] \
             = add_contract_price(df_quarter, contract_timeType, coin_Type, datetime_open, datetime_high, datetime_close,
                                  datetime_low)
-        # [instrument_open, instrument_high, instrument_close, instrument_low] \
-        #     = add_contract_instrument(df_quarter, contract_timeType, coin_Type, instrument_open, instrument_high, instrument_close, instrument_low)
         instrument = add_contract_instrument(df_quarter, contract_timeType, coin_Type, instrument)
         volume = add_contract_volume(df_quarter, contract_timeType, coin_Type, volume)
 
     price_df_list = [datetime_open, datetime_high, datetime_close, datetime_low]
-    # instrument_df_list = [instrument_open, instrument_high, instrument_close, instrument_low]
     return [price_df_list,instrument,volume]
 
 def mkdir(path):

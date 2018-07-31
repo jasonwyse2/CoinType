@@ -31,6 +31,9 @@ def generate_signal(price_focused,instrument_focused,period,std_num,cleartype):
     position_contract1 = pd.Series([0] * two_contract_diff.shape[0])
     position_contract2 = pd.Series([0] * two_contract_diff.shape[0])
 
+    position_contract11 = pd.Series([0] * two_contract_diff.shape[0])
+    position_contract22 = pd.Series([0] * two_contract_diff.shape[0])
+
     instrument_contract1, instrument_contract2 = instrument_focused.iloc[:,0],instrument_focused.iloc[:,1]
 
     for i in range(period, period_mean.shape[0]):
@@ -58,6 +61,15 @@ def generate_signal(price_focused,instrument_focused,period,std_num,cleartype):
                 if position_contract1[i - 1] == -1:
                     position_contract1[i] = 0
                     position_contract2[i] = 0
+
+    # position_contract11[two_contract_diff<=floor_price] = 1
+    # position_contract22[two_contract_diff <= floor_price] = -1
+    #
+    # position_contract11[two_contract_diff >= ceil_price] = 1
+    # position_contract22[two_contract_diff >= ceil_price] = -1
+    #
+    # position_contract11[two_contract_diff > floor_price and two_contract_diff < ceil_price] = 1
+
     return position_contract1,position_contract2
 def get_std_divide_price(price_focused,period):
     two_contract_diff = price_focused.iloc[:, 0] - price_focused.iloc[:, 1]
@@ -73,8 +85,10 @@ def load_data_from_file(price_type,dest_dir,datetime_exist=0):
         fullfileName_price = os.path.join(dest_dir,fileName_price)
         fileName_instrument = 'instrument.csv'
         fullfileName_instrument = os.path.join(dest_dir,fileName_instrument)
+        fullfileName_volume = os.path.join(dest_dir, 'volume.pkl')
         price = pd.read_csv(fullfileName_price).iloc[:,1:]
         instrument = pd.read_csv(fullfileName_instrument).iloc[:,1:]
+        volume = pd.read_csv(fullfileName_volume)[:, 1:]
         datetime = price.iloc[:,0]
     elif datetime_exist==0:
         fileName_price = price_type + '.pkl'
@@ -82,13 +96,15 @@ def load_data_from_file(price_type,dest_dir,datetime_exist=0):
         fileName_instrument = 'instrument.pkl'
         fullfileName_instrument = os.path.join(dest_dir, fileName_instrument)
         fullfileName_datetime = os.path.join(dest_dir, 'datetime.pkl')
-        price = pd.DataFrame(file_io.getpkl(fullfileName_price))
-        instrument = pd.DataFrame(file_io.getpkl(fullfileName_instrument))
+        price = pd.DataFrame(file_io.getpkl(fullfileName_price)[:,1:])
+        instrument = pd.DataFrame(file_io.getpkl(fullfileName_instrument)[:,1:])
         datetime = pd.DataFrame(file_io.getpkl(fullfileName_datetime))
+        fullfileName_volume = os.path.join(dest_dir, 'volume.pkl')
+        volume = pd.DataFrame(file_io.getpkl(fullfileName_volume)[:,1:])
     else:
         print('invalid datetime_exist:%s'%str(datetime_exist))
         exit()
-    return price,instrument,datetime
+    return price,instrument,datetime,volume
 
 # def show_figure(plt_obj_list,title_list,figure_num=1):
 #     plt.figure(figure_num)
@@ -135,7 +151,7 @@ def get_return_plus_commission(price_focused, position_contract, period):
     return_contract_plus_commission = return_contract + commission_contract
     return return_contract_plus_commission
 
-def get_focused_PriceInstrumentDatetime(price,instrument,datetime,coinType):
+def get_focused_info(price, instrument, datetime, volume, coinType, two_contract):
     column_offset = coinType_list.index(coinType) * 3
     contract1_idx = contract_map[two_contract[0]]
     contract2_idx = contract_map[two_contract[1]]
@@ -144,8 +160,10 @@ def get_focused_PriceInstrumentDatetime(price,instrument,datetime,coinType):
     instrument_focused_nan = instrument[[column_offset + contract1_idx, column_offset + contract2_idx]]
     # remove rows that contains 'nan'
     price_focused = price_focused_nan.dropna(axis=0, how='any')
-    instrument_focused = instrument_focused_nan.dropna(axis=0, how='any')
+    # instrument_focused = instrument_focused_nan.dropna(axis=0, how='any')
+    instrument_focused = instrument_focused_nan.iloc[price_focused.index.tolist(), :]
     datetime_focused = datetime.iloc[price_focused.index.tolist(), :]
+    volume = volume.iloc[price_focused.index.tolist(), :]
     # reset index from 0, because some index has been removed
     price_focused.index = range(len(price_focused.index))
     instrument_focused.index = range(len(instrument_focused.index))
@@ -155,8 +173,8 @@ def get_focused_PriceInstrumentDatetime(price,instrument,datetime,coinType):
 def run(start_time,end_time,db_table,price_type,period,coinType,std_num,two_contract,dest_dir, cleartype,datetime_exist=0):
     # read data from file, if data doesn't exist, get_data() will generate data automaticly
     qtd.get_data(start_time,end_time,dest_dir,db_table)
-    price, instrument, datetime = load_data_from_file(price_type, dest_dir,datetime_exist)
-    price_focused, instrument_focused, datetime_focused = get_focused_PriceInstrumentDatetime(price,instrument,datetime,coinType)
+    price, instrument, datetime,volume = load_data_from_file(price_type, dest_dir,datetime_exist)
+    price_focused, instrument_focused, datetime_focused = get_focused_info(price, instrument, datetime, volume, coinType, two_contract)
     # get position signal {1:'long',-1:'short','0':clear}
     position_contract1, position_contract2 = generate_signal(price_focused, instrument_focused, period, std_num,cleartype)
 
@@ -231,7 +249,7 @@ def roll_test(start_time,end_time,db_table,price_type,window_period_list,coinTyp
             buysell_info_df = res_list[7]
             seq = [coinType, price_type, two_contract[0], two_contract[1], cleartype, str(window_period_list[i]), str(std_num_list[j])]
             write_tradeInfo_to_file(buysell_dir, seq, buysell_info_df)
-            max_withdraw = indicator.get_max_drawdown(contract_1and2_return, datetime_focused, start_time, end_time)
+            max_withdraw,dd_start_idx,dd_end_idx = indicator.get_max_drawdown(contract_1and2_return, datetime_focused, start_time, end_time)
             results_return_dd[i][j] = np.sum(contract_1and2_return)/abs(max_withdraw)
             results_std_price[i][j] = std_divide_price
             results_turnover[i][j] = total_turnover
@@ -279,20 +297,22 @@ def average_allCoin(result_dir, average_dir, price_type, two_contract, cleartype
 
 
 if __name__ == '__main__':
-    start_time = '201807220000'#20180616000
-    end_time =   '201807291200'#201806160030, 201807090000,201807170000
+    pass
+    start_time = '201806160000'#20180616000
+    end_time =   '201807260000'#201806160030, 201807090000,201807170000
     db_table = '1min' #['1min','5min']
     price_type = 'close'#[]
+    minutes_in_uninTime = 24 * 60
 
     coinType_list = ['bch', 'btc', 'btg', 'eos', 'etc', 'eth', 'ltc', 'xrp'] #do not change this variable
     # two_contract = ['week', 'quarter']#['week','nextweek', 'quarter']
     three_contract = ['week', 'nextweek','quarter']
-    coin_list = ['btc', 'bch','eth', 'etc', 'eos']#  'btc', 'bch','eth', 'etc', 'eos',    , 'ltc', 'xrp', 'btg'
+    coin_list = ['btc']#  'btc', 'bch','eth', 'etc', 'eos',    , 'ltc', 'xrp', 'btg'
 
     # cleartype_coefficient_dict = {'ceilfloor': 1, 'half_stdnum': 0.5, 'medium': 0}
     cleartype = 'medium' #[ceilfloor,medium,half-stdnum,threeQuarters-stdnum]
-    window_period_list = [2000,3000,4000,5000,7000] #
-    std_num_list = [2.5, 3, 3.25, 3.5, 3.75, 4] #
+    window_period_list = [5000] #
+    std_num_list = [4] #2.5, 3, 3.25, 3.5, 3.75, 4
 
     father_dir = os.path.abspath(os.path.join(os.getcwd(), ".."))
     root_data = os.path.join(father_dir,'data')
