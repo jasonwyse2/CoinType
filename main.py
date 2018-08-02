@@ -1,4 +1,8 @@
-from CTA import *
+from CTA import mkdir
+import os
+import datetime,time
+from CTA import roll_test,average_allCoin
+from CTA_Class import CTA
 if __name__ == '__main__':
     start_time = '201806160000'#20180616000
     end_time =   '201807260000'#201806160030, 201807090000,201807170000
@@ -14,7 +18,7 @@ if __name__ == '__main__':
     # cleartype_coefficient_dict = {'ceilfloor': 1, 'half_stdnum': 0.5, 'medium': 0}
     cleartype = 'medium' #[ceilfloor,medium,half-stdnum,threeQuarters-stdnum]
     window_period_list = [5000] #
-    std_num_list = [4] #2.5, 3, 3.25, 3.5, 3.75, 4
+    std_num_list = [3.5] #2.5, 3, 3.25, 3.5, 3.75, 4
 
     father_dir = os.path.abspath(os.path.join(os.getcwd(), ".."))
     root_data = os.path.join(father_dir,'data')
@@ -36,13 +40,13 @@ if __name__ == '__main__':
     mkdir(buysell_dir)
     commission_rate_buy = 0.0000
     commission_rate_sell = commission_rate_buy
-
+    cta = CTA()
     for coinType in coin_list:
         for i in range(len(three_contract)):
             if i==2:
                 time_start = time.clock()
                 two_contract = [three_contract[i%3],three_contract[(i+1)%3]]
-                roll_test(start_time, end_time, db_table, price_type, window_period_list, coinType, std_num_list, two_contract, data_dir, result_dir, buysell_dir,cleartype)
+                cta.roll_test(start_time, end_time, db_table, price_type, window_period_list, coinType, std_num_list, two_contract, data_dir, result_dir, buysell_dir,cleartype)
                 time_end = time.clock()
                 elapsed = time_end - time_start
                 print('coinType:%s, two_contract:%s,%s complete! elapsed time is:%s'%(coinType,two_contract[0],two_contract[1],str(elapsed)))
@@ -53,4 +57,4 @@ if __name__ == '__main__':
             if i == 2:
                 time_start = time.clock()
                 two_contract = [three_contract[i % 3], three_contract[(i + 1) % 3]]
-                average_allCoin(result_dir, average_dir, price_type, two_contract, cleartype, average_type)
+                cta.average_allCoin(result_dir, average_dir, price_type, two_contract, cleartype, average_type)

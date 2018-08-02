@@ -77,21 +77,9 @@ def add_contract_price(df_data, contract_timeType, coinType, datetime_open, date
     return [datetime_open,datetime_high,datetime_close,datetime_low]
 
 def add_contract_instrument(df_data, contract_timeType, coinType, instrument):
-    # instrument_open = pd.merge(instrument_open, df_data[['instrument', 'datetime']], on='datetime', how='left')
-    # instrument_open.rename(columns={'instrument': coinType +'_' + contract_timeType}, inplace = True)
-    #
-    # instrument_high = pd.merge(instrument_high, df_data[['instrument', 'datetime']], on='datetime', how='left')
-    # instrument_high.rename(columns={'instrument': coinType + '_' + contract_timeType}, inplace = True)
-    #
-    # instrument_close = pd.merge(instrument_close, df_data[['instrument', 'datetime']], on='datetime', how='left')
-    # instrument_close.rename(columns={'instrument': coinType + '_' + contract_timeType}, inplace = True)
-    #
-    # instrument_low = pd.merge(instrument_low, df_data[['instrument', 'datetime']], on='datetime', how='left')
-    # instrument_low.rename(columns={'instrument': coinType + '_' + contract_timeType}, inplace = True)
 
     instrument = pd.merge(instrument, df_data[['instrument', 'datetime']], on='datetime', how='left')
     instrument.rename(columns={'instrument': coinType + '_' + contract_timeType}, inplace=True)
-    # return [instrument_open,instrument_high,instrument_close,instrument_low]
     return instrument
 
 def add_contract_volume(df_data,contract_timeType,coinType,volume):

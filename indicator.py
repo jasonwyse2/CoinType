@@ -3,8 +3,14 @@ import pymysql
 from datetime import datetime
 import numpy as np
 import time
-from CTA import get_commission_signal
+
 from dateutil.relativedelta import relativedelta
+
+def get_commission_signal(position_signal):
+    BuySell_signal = pd.Series([0] * position_signal.shape[0])
+    position_diff = np.diff(position_signal)
+    BuySell_signal[2:] = position_diff[:-1]
+    return BuySell_signal
 
 def currentTime_forward_delta(currentTime, min_deltaTime):
 
@@ -40,13 +46,9 @@ def get_average_annual_return(total_return, datetime_focused, start_time, end_ti
 
 def get_max_drawdown(total_return, datetime_focused, start_time, end_time):
     return_for_unitTime_list,unitTime_list = get_return_for_unitTime(total_return, datetime_focused, start_time, end_time)
-    drawdown_list = []
+
     return_for_unitTime_series = pd.Series(return_for_unitTime_list)
     return_for_unitTime_cum = np.cumsum(return_for_unitTime_series)+1
-
-    for i in range(1,len(return_for_unitTime_cum)):
-        drawdown_list.append(return_for_unitTime_cum[i]/np.max(return_for_unitTime_cum[:i])-1)
-    max_drawdown = np.min(drawdown_list)
 
     cum_max = np.maximum.accumulate(return_for_unitTime_cum)
     dd_array = return_for_unitTime_cum/cum_max-1
@@ -57,10 +59,10 @@ def get_max_drawdown(total_return, datetime_focused, start_time, end_time):
 
     dd_startTime = unitTime_list[dd_start_idx]
     dd_endTime = unitTime_list[dd_end_idx]
-    return max_drawdown,dd_start_idx,dd_end_idx
+    return max_dd,dd_start_idx,dd_end_idx
 
-def get_total_turnover(position_contract1,position_contract2,period):
-    position_signal1 = get_commission_signal(position_contract1, period)
+def get_total_turnover(position_signal1, position_signal2):
+    position_signal1 = get_commission_signal(position_signal1)
     turn_over  = np.sum(position_signal1[position_signal1>0])
     return turn_over
 def sharp_ratio(total_return,datetime_focused,start_time,end_time):
