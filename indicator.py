@@ -7,10 +7,10 @@ import time
 from dateutil.relativedelta import relativedelta
 
 def get_commission_signal(position_signal):
-    BuySell_signal = pd.Series([0] * position_signal.shape[0])
+    buysell_signal = pd.Series([0] * position_signal.shape[0])
     position_diff = np.diff(position_signal)
-    BuySell_signal[2:] = position_diff[:-1]
-    return BuySell_signal
+    buysell_signal[2:] = position_diff[:-1]
+    return buysell_signal
 
 def currentTime_forward_delta(currentTime, min_deltaTime):
 
@@ -22,7 +22,7 @@ def currentTime_forward_delta(currentTime, min_deltaTime):
 
 def get_return_for_unitTime(total_return, datetime_focused, start_time, end_time, minutes_in_uninTime =24 * 60):
     last_time_point = start_time
-    datetime_focused = datetime_focused.iloc[:, 0]
+    # datetime_focused = datetime_focused.iloc[:, 0]
     cur_time_point = currentTime_forward_delta(start_time, minutes_in_uninTime)
     return_for_unitTime_list = []
     unitEndTime_list = []
@@ -61,9 +61,10 @@ def get_max_drawdown(total_return, datetime_focused, start_time, end_time):
     dd_endTime = unitTime_list[dd_end_idx]
     return max_dd,dd_start_idx,dd_end_idx
 
-def get_total_turnover(position_signal1, position_signal2):
-    position_signal1 = get_commission_signal(position_signal1)
-    turn_over  = np.sum(position_signal1[position_signal1>0])
+def get_total_turnover(position_signal_list):
+    position_signal = position_signal_list[0]
+    buysell_signal = get_commission_signal(position_signal)
+    turn_over  = np.sum(buysell_signal[buysell_signal>0])
     return turn_over
 def sharp_ratio(total_return,datetime_focused,start_time,end_time):
     return_for_day_list,unitTime_list = get_return_for_unitTime(total_return, datetime_focused, start_time, end_time)
@@ -74,4 +75,12 @@ def sharp_ratio(total_return,datetime_focused,start_time,end_time):
     else:
         sharp = return_mean_day/return_std_day*np.sqrt(365)
     return sharp
+
+def get_std_divide_price(price_focused, period):
+    # price_focused = self.price_focused_list[3]
+    two_contract_diff = price_focused.iloc[:, 0] - price_focused.iloc[:, 1]
+    price1 = price_focused.iloc[:, 0]
+    period_std = two_contract_diff.rolling(period).std()
+    std_divide_price = np.mean(period_std / price1)
+    return std_divide_price
 

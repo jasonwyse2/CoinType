@@ -3,9 +3,9 @@ import pymysql
 from datetime import datetime
 import time
 import numpy as np
-import file_io as fio
 import os
-from dateutil.relativedelta import relativedelta
+import tool
+
 
 db_host_list = ['192.168.0.113','206.189.89.22','192.168.0.113','127.0.0.1'] #192.168.0.113, 206.189.89.22
 db_port_list = [3306,5555,3306,3306] #3306 , 5555
@@ -136,23 +136,6 @@ def mkdir(path):
         flag = 0
     return flag
 
-# def write_df_to_file(df_list, project_path, type):
-#     p_list = ['open','high','close','low']
-#     time_series = df_list[0].iloc[:,0]
-#     mkdir(project_path)
-#     full_fileName = os.path.join(project_path, 'datetime.pkl')
-#     fio.dumppkl(time_series, full_fileName)
-#     for i in range(len(p_list)):
-#         df = df_list[i].iloc[:,1:]
-#         df_values = df.values
-#         fileName = '_'.join([p_list[i], type+'.pkl'])
-#         full_fileName = os.path.join(project_path, fileName)
-#         if not os.path.exists(full_fileName):
-#             fio.dumppkl(df_values,full_fileName)
-#         fileName = '_'.join([p_list[i], type+'.csv'])
-#         full_fileName = os.path.join(project_path, fileName)
-#         if not os.path.exists(full_fileName):
-#             df_list[i].to_csv(full_fileName,index=False)
 
 def write_df_to_file(df, project_path, type):
 
@@ -160,7 +143,7 @@ def write_df_to_file(df, project_path, type):
     fileName = ''.join([type, '.pkl'])
     full_fileName = os.path.join(project_path, fileName)
     if not os.path.exists(full_fileName):
-        fio.dumppkl(df_values,full_fileName)
+        tool.dumppkl(df_values,full_fileName)
     fileName = ''.join([type, '.csv'])
     full_fileName = os.path.join(project_path, fileName)
     if not os.path.exists(full_fileName):
