@@ -91,7 +91,9 @@ def quick_datetime_symbol(start_time, end_time,db_table):
 
     # read codes from database and save as dataframe
     datetime_open = get_unique_datetime(start_time,end_time,db_table)
-    datetime_high,datetime_close,datetime_low = datetime_open,datetime_open,datetime_open
+    datetime_high = get_unique_datetime(start_time,end_time,db_table)
+    datetime_close = get_unique_datetime(start_time,end_time,db_table)
+    datetime_low = get_unique_datetime(start_time,end_time,db_table)
     instrument = get_unique_datetime(start_time, end_time, db_table)
     volume = get_unique_datetime(start_time,end_time,db_table)
     for coin_Type in coinType_list:

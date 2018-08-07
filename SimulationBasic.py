@@ -7,6 +7,7 @@ import numpy as np
 from tool import *
 import pymysql
 import indicator
+from indicator_backup import Indicator
 import tool
 import re
 class DATA:
@@ -169,7 +170,7 @@ class DATA:
         volume = pd.DataFrame(getpkl(fullfileName_volume)[:, 1:])
         return price_df_list, instrument, datetime, volume
 
-class CTA:
+class SimulationBasic:
     __contract_map = {'week': 0, 'nextweek': 1, 'quarter': 2}
     __cleartype_coefficient_dict = {'ceilfloor': 1, 'half-stdnum': 0.5, 'medium': 0, 'threeQuarters-stdnum': 0.75}
     __coinType_list = ['bch', 'btc', 'btg', 'eos', 'etc', 'eth', 'ltc', 'xrp']  # do not change this variable
@@ -180,16 +181,18 @@ class CTA:
     __root_average = os.path.join(__project_dir, 'average')
     __root_buysellInfo = os.path.join(__project_dir, 'buysell')
     __singleton = 0
+    __average_result_tag= 0
+    indi_list_list = []
     start_time = '201806160000'
     db_table = '1min'  # ['1min','5min']
     three_contract = ['week', 'nextweek', 'quarter']
-    bp_list=[]
-    comp_bp_list=[]
-    return_dd_list = []
-    std_price_list = []
-    turnover_list = []
-    average_type_list = []
-    average_result_list = [bp_list,comp_bp_list,return_dd_list,std_price_list,turnover_list]
+    # bp_list=[]
+    # comp_bp_list=[]
+    # return_dd_list = []
+    # std_price_list = []
+    # turnover_list = []
+    # average_type_list = []
+    # average_result_list = [bp_list,return_dd_list,turnover_list]
     buy_commission_rate = 0.0000
     sell_commission_rate = 0.0000
     __data = DATA()
@@ -314,14 +317,14 @@ class CTA:
     #                     position_signal1[i] = 0
     #                     position_signal2[i] = 0
     #     return [position_signal1, position_signal2]
-    def generate_position_signal(self, args_list):
+    def generate_position_signal(self,):
 
-        [period, std_num, cleartype] = args_list
+        [window_period, std_num, cleartype] = [self.window_period,self.std_num,self.cleartype]
         open, high, low, close = self.price_focused_list[0], self.price_focused_list[1], self.price_focused_list[2], self.price_focused_list[3]
         two_contract_diff = close.iloc[:, 0] - close.iloc[:, 1]
 
-        period_mean = two_contract_diff.rolling(period).mean()
-        period_std = two_contract_diff.rolling(period).std()
+        period_mean = two_contract_diff.rolling(window_period).mean()
+        period_std = two_contract_diff.rolling(window_period).std()
 
         ceil_price = period_mean + period_std * std_num
         floor_price = period_mean - period_std * std_num
@@ -333,7 +336,7 @@ class CTA:
         position_signal1 = pd.Series([0] * two_contract_diff.shape[0])
         position_signal2 = pd.Series([0] * two_contract_diff.shape[0])
         instrument_contract1, instrument_contract2 = self.instrument_focused.iloc[:, 0], self.instrument_focused.iloc[:, 1]
-        for i in range(period-1, period_mean.shape[0]):
+        for i in range(window_period-1, period_mean.shape[0]):
             delivery_time1 = self.__is_delivery_time(instrument_contract1.iloc[i], self.datetime_focused.iloc[i])
             delivery_time2 = self.__is_delivery_time(instrument_contract2.iloc[i], self.datetime_focused.iloc[i])
             if delivery_time1==True or delivery_time2==True:
@@ -359,7 +362,8 @@ class CTA:
                     if position_signal1[i - 1] == -1:
                         position_signal1[i] = 0
                         position_signal2[i] = 0
-        return [position_signal1, position_signal2]
+        position_signal_list = [position_signal1, position_signal2]
+        return position_signal_list
 
     def get_compound_return(self, buysell_signal_list):
         price_focused_list = self.price_focused_list
@@ -395,14 +399,14 @@ class CTA:
         buysell_signal = indicator.get_commission_signal(position_signal)
         return buysell_signal
 
-    def get_buysell_info(self,price_focused_df,position_signal_list, buysell_signal_list, single_return_list, compound_return_list):
-        # price_focused_df = self.price_focused_list[3]
+    def get_buysell_info(self,):
+        price_focused_df = self.price_focused_list[3]
         buysell_info = pd.concat(
             [self.datetime_focused,
-             price_focused_df.iloc[:, 0], position_signal_list[0], buysell_signal_list[0], single_return_list[0],
-             compound_return_list[0],
-             price_focused_df.iloc[:, 1], position_signal_list[1], buysell_signal_list[1], single_return_list[1],
-             compound_return_list[1]], axis=1)
+             price_focused_df.iloc[:, 0], self.position_signal_list[0], self.buysell_signal_list[0], self.single_return_list[0],
+             self.compound_return_list[0],
+             price_focused_df.iloc[:, 1], self.position_signal_list[1], self.buysell_signal_list[1], self.single_return_list[1],
+             self.compound_return_list[1]], axis=1)
         buysell_info.columns = ['datetime',
                                 'price1', 'position1', 'buysell1', 'single_return1', 'compound_return1',
                                 'price2', 'position2', 'buysell2', 'single_return2', 'compound_return2']
@@ -432,10 +436,14 @@ class CTA:
             buysell_signal_list.append(buysell_signal)
         return single_return_list, buysell_signal_list
 
-    def get_focused_info(self,price_df_list, instrument, datetime, volume, coinType, two_contract):
-        column_offset = self.__coinType_list.index(coinType) * 3
-        contract1_idx = self.__contract_map[two_contract[0]]
-        contract2_idx = self.__contract_map[two_contract[1]]
+    def get_focused_info(self,):
+        data_obj = self.__data
+        data_obj.get_data(self.start_time, self.end_time, self.data_dir)
+        price_df_list, instrument, datetime, volume = data_obj.load_data_from_file(self.data_dir)
+
+        column_offset = self.__coinType_list.index(self.coinType) * 3
+        contract1_idx = self.__contract_map[self.two_contract[0]]
+        contract2_idx = self.__contract_map[self.two_contract[1]]
 
         # fourPrice_type_list = ['open', 'high', 'low', 'close']
         price_focused_list = []
@@ -462,29 +470,14 @@ class CTA:
         datetime_focused = datetime_focused.iloc[:,0]
         return [price_focused_list, volume_focused, instrument_focused, datetime_focused]
 
-    def run(self, period, std_num):
+    def run(self,):
         # get position signal {1:'long',-1:'short','0':clear}
-        args_list = [period, std_num, self.cleartype]
-        position_signal_list = self.generate_position_signal(args_list)
-        single_return_list, buysell_signal_list = self.get_single_return_with_position(position_signal_list, period)
+        position_signal_list = self.generate_position_signal()
+        single_return_list, buysell_signal_list = self.get_single_return_with_position(position_signal_list, self.window_period)
         compound_return_list = self.get_compound_return(buysell_signal_list)
         res_list = [position_signal_list, buysell_signal_list,single_return_list, compound_return_list]
         return res_list
-    def start(self):
-        for coinType in self.coin_list:
-            for i in range(len(self.three_contract)):
-                if i == 2:
-                    time_start = time.clock()
-                    two_contract = [self.three_contract[i % 3], self.three_contract[(i + 1) % 3]]
-                    self.two_contract = two_contract
-                    self.roll_test(coinType, two_contract)
-                    time_end = time.clock()
-                    elapsed = time_end - time_start
-                    print('coinType:%s, two_contract:%s,%s complete! elapsed time is:%s' % (
-                    coinType, two_contract[0], two_contract[1], str(elapsed)))
 
-        average_type_list = ['bp', 'comp-bp', 'return-dd', 'std-price', 'turnover']
-        self.average_result(average_type_list)
     def write_buysell_info_to_file(self, buysell_dir, seq, buysell_info_df):
         file_name = '_'.join(seq) + '.csv'
         result_full_filename = os.path.join(buysell_dir, file_name)
@@ -499,103 +492,128 @@ class CTA:
         result_df.columns = columns
         result_df.to_csv(result_full_filename)
 
+    def start(self):
+        for coinType in self.coin_list:
+            for i in range(len(self.three_contract)):
+                if i == 2:
+                    time_start = time.clock()
+                    two_contract = [self.three_contract[i % 3], self.three_contract[(i + 1) % 3]]
+                    self.two_contract = two_contract
+                    self.coinType = coinType
+                    self.roll_test()
+                    time_end = time.clock()
+                    elapsed = time_end - time_start
+                    print('coinType:%s, two_contract:%s,%s complete! elapsed time is:%s' % (
+                    coinType, two_contract[0], two_contract[1], str(elapsed)))
+        self.average_result()
+        self.write_indicator_to_file()
 
-    def roll_test(self,coinType, two_contract):
+    def write_indicator_to_file(self):
+        file_name = 'indicator'+'.csv'
+        full_filename = os.path.join(self.result_dir,file_name)
+        f = open(full_filename, "w")
+        line = 'cointype,from,to,ret,tvr,sharp,ret2dd,dd,dd_start,dd_end,mg_bp'
+        f.writelines(line)
+        f.write('\n')
+        for i in range(len(self.indi_list_list)):
+            li = list(self.indi_list_list[i])
+            li[3] = round(li[3]*100,4)
+            li[4] = round(li[4]*100,2)
+            li[5] = round(li[5],2)
+            li[6] = round(li[6],2)
+            li[7] = round(li[7]*100,2)
+            li[10] = round(li[10]*10000,2)
+            line = ",".join(str(it) for it in li)
+            f.writelines(line)
+            f.write('\n')
+    def roll_test(self,):
 
         self.set_directory(self.start_time, self.end_time, self.cleartype)
-
-        data_obj = self.__data
-        data_obj.get_data(self.start_time, self.end_time, self.data_dir)
-        price_df_list, instrument, datetime, volume = data_obj.load_data_from_file(self.data_dir)
-        [self.price_focused_list, self.volume_focused, self.instrument_focused, self.datetime_focused] = \
-            self.get_focused_info(price_df_list, instrument, datetime, volume, coinType, two_contract)
+        [self.price_focused_list, self.volume_focused, self.instrument_focused, self.datetime_focused] = self.get_focused_info()
 
         # initialize the variables we need to record
         results_single_return_bp = np.zeros((len(self.window_period_list), len(self.std_num_list)))
-        results_compound_return_bp = results_single_return_bp
-        results_return_dd = results_single_return_bp
-        results_std_price = results_single_return_bp
-        results_turnover = results_single_return_bp
+        results_compound_return_bp = np.zeros((len(self.window_period_list), len(self.std_num_list)))
+        results_return_dd = np.zeros((len(self.window_period_list), len(self.std_num_list)))
+        results_std_price = np.zeros((len(self.window_period_list), len(self.std_num_list)))
+        results_turnover = np.zeros((len(self.window_period_list), len(self.std_num_list)))
 
         for i in range(len(self.window_period_list)):
             for j in range(len(self.std_num_list)):
-                window_period = self.window_period_list[i]
-                std_num = self.std_num_list[j]
+                self.window_period = self.window_period_list[i]
+                self.std_num = self.std_num_list[j]
                 # basic routine run(),
-                [position_signal_list, buysell_signal_list, single_return_list, compound_return_list] = \
-                    self.run(window_period, std_num)
+                [self.position_signal_list, self.buysell_signal_list,
+                 self.single_return_list, self.compound_return_list] = self.run()
 
-                price_focused_df = self.price_focused_list[3]
-                std_divide_price = indicator.get_std_divide_price(price_focused_df, window_period)
-                buysell_info = self.get_buysell_info(price_focused_df,position_signal_list, buysell_signal_list, single_return_list, compound_return_list)
-                total_turnover = indicator.get_total_turnover(position_signal_list)
-                single_return_add = single_return_list[0] + single_return_list[1]
+                indi_obj = Indicator(self)
+                std2price = indi_obj.get_std_divide_price()
 
-                seq = [coinType, two_contract[0], two_contract[1], self.cleartype, str(window_period),str(std_num)]
-                self.write_buysell_info_to_file(self.buysell_dir, seq, buysell_info)
+                ret = indi_obj.get_total_return()
+                tvr = indi_obj.get_total_turnover()
+                mean_tvr = indi_obj.get_mean_turnover()
+                dd, dd_start, dd_end = indi_obj.get_max_drawdown()
+                ret_unitTime_list,endtime_list = indi_obj.get_return_for_unitTime()
+                sharp = indi_obj.get_sharp()
+                ret_unit_df = pd.DataFrame({'endtime':endtime_list,'return':ret_unitTime_list})
+                ret2dd = indi_obj.get_return_divide_dd()
+                mg_bp = indi_obj.get_margin_bp()
+                # long,short = 0.5,-0.5
+                indi_list = [self.coinType, self.start_time, self.end_time, ret, mean_tvr,sharp,ret2dd,dd,dd_start,dd_end,mg_bp]
+                self.indi_list_list.append(indi_list)
+                print(indi_list)
 
-                max_withdraw, dd_start_idx, dd_end_idx = indicator.get_max_drawdown(single_return_add,
-                                                                                    self.datetime_focused, self.start_time,
-                                                                                    self.end_time)
+                self.buysell_info = self.get_buysell_info()
+                seq = [self.coinType, self.two_contract[0], self.two_contract[1], self.cleartype, str(self.window_period),str(self.std_num)]
+                self.write_buysell_info_to_file(self.buysell_dir, seq, self.buysell_info)
+                seq.append('return')
+                self.write_buysell_info_to_file(self.buysell_dir, seq, ret_unit_df)
+                del seq[-1]
 
-                results_return_dd[i][j] = np.sum(single_return_add) / abs(max_withdraw)
-                results_std_price[i][j] = std_divide_price
-                results_turnover[i][j] = total_turnover
+                results_return_dd[i][j] = ret2dd
+                results_std_price[i][j] = std2price
+                results_turnover[i][j] = tvr
+                results_single_return_bp[i][j] = mg_bp
+                # if total_turnover == 0:
+                #     ave_single_return_bp = 0
+                #     ave_compound_return_bp = 0
+                # else:
+                #     compound_return_sum = np.sum(self.compound_return_list[0] + self.compound_return_list[1])
+                #     single_return_sum = np.sum(self.single_return_list[0] + self.single_return_list[1])
+                #     ave_single_return_bp = single_return_sum / 2 / total_turnover
+                #     ave_compound_return_bp = compound_return_sum / 2 / total_turnover
+                # results_single_return_bp[i][j] = ave_single_return_bp
+                # results_compound_return_bp[i][j] = ave_compound_return_bp
 
-                if total_turnover == 0:
-                    ave_single_return_bp = 0
-                    ave_compound_return_bp = 0
-                else:
-                    compound_return_sum = np.sum(compound_return_list[0] + compound_return_list[1])
-                    single_return_sum = np.sum(single_return_list[0] + single_return_list[1])
-                    ave_single_return_bp = single_return_sum / 2 / total_turnover
-                    ave_compound_return_bp = compound_return_sum / 2 / total_turnover
-                results_single_return_bp[i][j] = ave_single_return_bp
-                results_compound_return_bp[i][j] = ave_compound_return_bp
-
-        results_list = [results_single_return_bp,results_compound_return_bp,results_return_dd,results_std_price,results_turnover]
+        seq = [self.coinType, self.two_contract[0], self.two_contract[1], self.cleartype]
+        results_list = [results_single_return_bp,results_return_dd,results_turnover]
+        self.results_tag_list = ['mg-bp','ret2dd','turnover']
+        self.get_average_result_list(self.results_tag_list)
         for i in range(len(results_list)):
+            # record the data results for each coin type, it's used for calculating the average results
             self.average_result_list[i].append(results_list[i])
-
-        seq = [coinType, two_contract[0], two_contract[1], self.cleartype]
-        results_list = [results_single_return_bp,results_compound_return_bp,results_return_dd,results_std_price,results_turnover]
-        results_tag_list = ['bp','comp-bp','return-dd','std-price','turnover']
-        for i in range(len(results_list)):
-            seq.append(results_tag_list[i])
+            seq.append(self.results_tag_list[i])
             self.write_result_to_file(self.result_dir, seq, results_list[i], self.window_period_list, self.std_num_list)
             del seq[-1]
 
-    # def average_allCoin(self, two_contract, cleartype, average_type):
-    #     result_dir, average_dir = self.result_dir,self.average_dir
-    #     compile_str = '[a-z]+_%s_%s_%s_%s.csv' % (two_contract[0], two_contract[1], cleartype, average_type)
-    #     pattern = re.compile(compile_str)
-    #     fileNames = os.listdir(result_dir)
-    #     full_fileName = os.path.join(result_dir, fileNames[0])
-    #     tmp_df = pd.read_csv(full_fileName)
-    #     sum_array = np.zeros(tmp_df.shape)
-    #     count = 0
-    #     for file in fileNames:
-    #         m = pattern.match(file)
-    #         if m is not None:
-    #             count += 1
-    #             filename = m.group()
-    #             full_fileName = os.path.join(result_dir, filename)
-    #             df = pd.read_csv(full_fileName)
-    #             ndarray = df.values
-    #             sum_array += ndarray
-    #     average_array = sum_array / count
-    #     ave_result = average_array[:, 1:]
-    #
-    #     seq = ['average', two_contract[0], two_contract[1], cleartype, average_type]
-    #     self.write_result_to_file(self.average_dir, seq, ave_result, index = tmp_df.iloc[:, 0], columns = tmp_df.columns[1:])
+    def get_average_result_list(self,results_tag_list):
+        if self.__average_result_tag ==0:
+            average_result_list = []
+            for i in range(len(results_tag_list)):
+                average_result_list.append([])
+            self.average_result_list = average_result_list
+            self.__average_result_tag = 1
+        return self.average_result_list
 
-    def average_result(self,average_type_list):
-        for i in range(len(average_type_list)):
+
+    def average_result(self,):
+        # results_tag_list
+        for i in range(len(self.results_tag_list)):
             sum_array = np.zeros(self.average_result_list[i][0].shape)
             for j in range(len(self.average_result_list[i])):
                 sum_array+= self.average_result_list[i][j]
             average_array = sum_array / len(self.average_result_list[i])
-            seq = ['average', self.two_contract[0], self.two_contract[1], self.cleartype, average_type_list[i]]
+            seq = ['average', self.two_contract[0], self.two_contract[1], self.cleartype, self.results_tag_list[i]]
             self.write_result_to_file(self.result_dir, seq, average_array, index=self.window_period_list,
                                       columns=self.std_num_list)
 

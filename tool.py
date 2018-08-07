@@ -1,6 +1,6 @@
 import pickle as pk
 import os
-import datetime
+from datetime import datetime
 from dateutil.relativedelta import relativedelta
 def dumppkl(data, path):
     datafile = open(path, 'w')
