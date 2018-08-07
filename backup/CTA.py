@@ -3,10 +3,8 @@
 import numpy as np
 import pandas as pd
 import quick_transfer_data as qtd
-import indicator
+from strategy.backup import indicator
 import os
-import datetime
-import time
 import re
 contract_map = {'week':0,'nextweek':1,'quarter':2}
 cleartype_coefficient_dict = {'ceilfloor':1,'half-stdnum':0.5,'medium':0,'threeQuarters-stdnum':0.75}
