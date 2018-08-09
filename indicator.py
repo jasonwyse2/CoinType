@@ -129,31 +129,43 @@ class Indicator:
                 dd_start_idx = dd_start_idx_array[i][0]
                 break
 
-        self.dd_startTime = unitTime_list[dd_start_idx]
-        self.dd_endTime = unitTime_list[dd_end_idx]
-        self.max_dd = max_dd
-        return self.max_dd,self.dd_startTime,self.dd_endTime
+        dd_startTime = unitTime_list[dd_start_idx]
+        dd_endTime = unitTime_list[dd_end_idx]
+        max_dd = round(max_dd*100,2)
+        dd_startTime = dd_startTime[:-4]
+        dd_endTime = dd_endTime[:-4]
+        return max_dd,dd_startTime,dd_endTime
 
     def get_margin_bp(self):
         total_turnover = self.get_total_turnover()
         mg_bp = self.get_total_return()/total_turnover
+        mg_bp = round(mg_bp*100,2)
         return mg_bp
     def get_return_divide_dd(self,):
         max_dd, a ,b  = self.get_max_drawdown()
         self.return2dd = self.get_total_return() / abs(max_dd)
+        self.return2dd = round(self.return2dd,2)
         return self.return2dd
     def get_total_return(self):
         single_return_list = self.get_single_return()
-        return np.sum(single_return_list[0]+single_return_list[1])
+        total_return = np.sum(single_return_list[0]+single_return_list[1])
+        total_return = round(total_return * 100, 4)
+        return total_return
     def get_total_turnover(self,):
         buysell_signal_list = self.get_buysell_signal()
-        buysell_signal = buysell_signal_list[0]
-        self.turn_over  = np.sum(buysell_signal[buysell_signal>0])*2
+        turn_over = 0.0
+        for i in range(len(buysell_signal_list)):
+            buysell_signal = buysell_signal_list[i]
+            # turn_over  += np.sum(buysell_signal[buysell_signal>0])
+            turn_over += np.sum(np.abs(buysell_signal))
+
+        self.turn_over = turn_over
         return self.turn_over
     def get_mean_turnover(self):
         total_turnover = self.get_total_turnover()
         return_for_unitTime_list, unitEndTime_list = self.get_return_for_unitTime()
         mean_turnover = float(total_turnover)/len(unitEndTime_list)
+        mean_turnover = round(mean_turnover * 100, 2)
         return mean_turnover
     def get_sharp(self, ):
         return_for_day_list,unitTime_list = self.get_return_for_unitTime()
@@ -164,6 +176,7 @@ class Indicator:
         else:
             sharp = return_mean_day/return_std_day*np.sqrt(365)
         self.sharp = sharp
+        sharp = round(sharp, 2)
         return sharp
 
     def get_std_divide_price(self,):

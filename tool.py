@@ -16,16 +16,24 @@ def getpkl(path):
     return ret
 
 
-def write_df_to_file(df, project_path, filename):
-    df_values = df.values
-    fileName = ''.join([filename, '.pkl'])
-    full_fileName = os.path.join(project_path, fileName)
-    if not os.path.exists(full_fileName):
-        dumppkl(df_values, full_fileName)
+def write_df_to_file(df, dest_dir, filename):
+
     fileName = ''.join([filename, '.csv'])
-    full_fileName = os.path.join(project_path, fileName)
+    full_fileName = os.path.join(dest_dir, fileName)
     if not os.path.exists(full_fileName):
         df.to_csv(full_fileName, index=False)
+
+def append_df_to_file(df,dest_dir,filename):
+    fileName_tmp = ''.join([filename+'tmp', '.csv'])
+    full_fileName_tmp = os.path.join(dest_dir, fileName_tmp)
+    df.to_csv(full_fileName_tmp, index=False, header = False)
+    fileName = ''.join([filename, '.csv'])
+    full_fileName = os.path.join(dest_dir, fileName)
+    with open(full_fileName, 'ab') as f:
+        f.write(open(full_fileName_tmp, 'rb').read())
+
+    if os.path.exists(full_fileName_tmp):
+        os.remove(full_fileName_tmp)
 
 def mkdir(path):
     path = path.strip()
