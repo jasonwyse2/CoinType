@@ -45,13 +45,6 @@ def mkdir(path):
         flag = 0
     return flag
 
-def currentTime_forward_deltaMin(currentTime, deltaTime):
-    time_format = "%Y%m%d%H%M"
-    curr = datetime.strptime(currentTime, time_format)
-    forward = (curr + relativedelta(months=+deltaTime))
-    cutTime = forward.strftime(time_format)
-    return cutTime
-
 def currentTime_forward_delta(currentTime, min_deltaTime):
     time_format = '%Y%m%d%H%M'
     curr = datetime.strptime(currentTime, time_format)

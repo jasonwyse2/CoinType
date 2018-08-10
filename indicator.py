@@ -9,113 +9,237 @@ import tool
 class Indicator:
     minutes_in_uninTime = 24 * 60
     return_for_unitTime_flag = 0
+    __sigleton_variable_flag= 0
+    __sigleton_buysell_signal_flag=0
+    __sigleton_single_return_flag = 0
     def __init__(self,cta):
         self.cta = cta
-        self.position_signal_list = cta.position_signal_list
-        # self.single_return_add = cta.single_return_list[0] + cta.single_return_list[1]
-        self.datetime_focused = cta.datetime_focused
+        self.position_signal_array = self.normalize_position_signal_array()
+        self.datetime = cta.datetime
         self.start_time = cta.start_time
         self.end_time = cta.end_time
+        # self.initialize_variables()
+        # self.buysell_signal_array = self.cta.buysell_signal_array
+        self.single_return_array = np.zeros(self.position_signal_array.shape)
+        self.compound_return_array = np.zeros(self.position_signal_array.shape)
+    def normalize_position_signal_array(self):
+
+        position_signal_array = self.cta.position_signal_array.copy()
+        # position_signal_array[np.isnan(position_signal_array)]=0
+        divisor = len(self.cta.coin_list)*len(self.cta.window_period_list)*len(self.cta.std_num_list)
+        row_sum_array = np.sum(np.absolute(position_signal_array),axis = 1)
+        (rows,cols) = position_signal_array.shape
+        # divisor_array = np.tile(row_sum_array,(cols,1)).T
+        divisor_array = np.array([divisor]*rows*cols).reshape(position_signal_array.shape)
+        position_signal_array_norm = position_signal_array/divisor_array
+        # position_signal_array_norm[np.isnan(position_signal_array_norm)]=0
+        return position_signal_array_norm
+    def initialize_variables(self):
+        if self.__sigleton_variable_flag==0:
+            self.buysell_signal_array = np.zeros(self.position_signal_array.shape)
+            self.single_return_array = np.zeros(self.position_signal_array.shape)
+
     def get_buysell_signal(self,):
-        buysell_signal_list = []
-        for i in range(len(self.position_signal_list)):
-            position_signal = self.position_signal_list[i]
-            buysell_signal = pd.Series([0.0] * position_signal.shape[0])
-            position_diff = np.diff(position_signal)
-            buysell_signal[2:] = position_diff[:-1]
-            buysell_signal_list.append(buysell_signal)
-        return buysell_signal_list
+        position_signal_array = self.position_signal_array
+        position_diff_array = np.diff(position_signal_array, axis=0)
+        buysell_signal_array = np.zeros(self.position_signal_array.shape)
+        # buysell_signal_array[2:, :] = position_diff_array[:-1, :]
+        buysell_signal_array[1:, :] = position_diff_array
+        self.buysell_signal_array = buysell_signal_array
+        return buysell_signal_array
+        # return self.cta.buysell_signal_array
     def get_single_return(self):
-        price_focused_df = self.cta.price_focused_list[3]
-        period = self.cta.window_period
-        single_return_list = []
-        buysell_signal_list = self.get_buysell_signal()
-        for i in range(len(self.position_signal_list)):
-            price_focused = price_focused_df.iloc[:, i]
-            per_return_contract = np.diff(price_focused) / price_focused[:-1]
-            position_signal = self.position_signal_list[i]
+        # return self.get_compound_return()
+        if self.__sigleton_single_return_flag >= 0:
+            position_signal_array = self.position_signal_array
+            period = self.cta.window_period
+            open, high, low, close = self.cta.price_df_list[0].values, self.cta.price_df_list[1].values, \
+                                          self.cta.price_df_list[2].values, self.cta.price_df_list[3].values
+            price_diff = np.diff(close,axis=0)
+            per_return_array = np.zeros(close.shape)
+            per_return_array[1:,:] = price_diff / close[:-1,:]
+            commission_array = np.zeros(close.shape)
+            buysell_signal_array = self.get_buysell_signal()
+            commission_array[period:, :] = np.abs(buysell_signal_array[period:, :]) * self.cta.buy_commission_rate
+            self.single_return_array[period:,:] = position_signal_array[period:,:]*per_return_array[period:]-commission_array[period:, :]
 
-            buysell_signal = buysell_signal_list[i]
-            contract_commission = pd.Series([0] * price_focused.shape[0])
-            contract_commission[buysell_signal > 0] = (buysell_signal * self.cta.buy_commission_rate)[
-                                                          buysell_signal > 0] * (-1)
-            contract_commission[buysell_signal < 0] = (buysell_signal * self.cta.sell_commission_rate)[buysell_signal < 0]
-
-            contract_return = pd.Series([0] * price_focused.shape[0])
-            contract_return[period + 1:] = np.array(position_signal[period - 1:-2]) * np.array(
-                per_return_contract[period:])
-            contract_single_return = contract_return + contract_commission
-            single_return_list.append(contract_single_return)
-
-        return single_return_list
+            self.__sigleton_single_return_flag = 1
+        return self.single_return_array
+        # price_focused_df = self.cta.price_focused_list[3]
+        # period = self.cta.window_period
+        # single_return_list = []
+        # buysell_signal_list = self.get_buysell_signal()
+        # for i in range(len(self.position_signal_list)):
+        #     price_focused = price_focused_df.iloc[:, i]
+        #     per_return_contract = np.diff(price_focused) / price_focused[:-1]
+        #     position_signal = self.position_signal_list[i]
+        #
+        #     buysell_signal = buysell_signal_list[i]
+        #     contract_commission = pd.Series([0] * price_focused.shape[0])
+        #     contract_commission[buysell_signal > 0] = (buysell_signal * self.cta.buy_commission_rate)[
+        #                                                   buysell_signal > 0] * (-1)
+        #     contract_commission[buysell_signal < 0] = (buysell_signal * self.cta.sell_commission_rate)[
+        #         buysell_signal < 0]
+        #
+        #     contract_return = pd.Series([0] * price_focused.shape[0])
+        #     contract_return[period + 1:] = np.array(position_signal[period - 1:-2]) * np.array(
+        #         per_return_contract[period:])
+        #     contract_single_return = contract_return + contract_commission
+        #     single_return_list.append(contract_single_return)
+        # return single_return_list
 
     def get_compound_return(self):
-        price_focused_list = self.cta.price_focused_list
-        commission_rate_buy, commission_rate_sell = self.buy_commission_rate, self.sell_commission_rate
-        open_focused, high_focused, low_focused, close_focused = price_focused_list[0], price_focused_list[1], \
-                                                                 price_focused_list[2], \
-                                                                price_focused_list[3]
-        compound_return_list = []
-        buysell_signal_list = self.get_buysell_signal()
-        for i in range(2):
-            total_return = pd.Series([0.0] * close_focused.shape[0])
-            BuySell_signal = buysell_signal_list[i]
-            price = close_focused.iloc[:, i]
-            buysell_signal = BuySell_signal[BuySell_signal != 0]
-            holding_position = np.cumsum(buysell_signal)
-            buysell_price = price[BuySell_signal != 0]
-            buysell_price_return = pd.Series([0] * buysell_price.shape[0])
-            buysell_price_return[1:] = np.diff(buysell_price) / buysell_price[:-1]
-            # iterate the price series, which only contains buy and sell points.
-            buysell_rate = commission_rate_buy + commission_rate_sell
-            index = buysell_signal.index
+        price_focused_list = self.cta.price_df_list
+        commission_rate_buy, commission_rate_sell = self.cta.buy_commission_rate, self.cta.sell_commission_rate
+        open_focused, high_focused, low_focused, close_focused = \
+            price_focused_list[0], price_focused_list[1], price_focused_list[2], price_focused_list[3]
+        close = self.cta.price_df_list[3].values
+        compound_return_array = self.compound_return_array
+        buysell_signal_array = self.get_buysell_signal()
+        buysell_signal_df = pd.DataFrame(buysell_signal_array,index =self.cta.instrument.index)
+        buysell_signal = buysell_signal_df.iloc[np.sum(np.abs(buysell_signal_df.values),axis=1)>0,:]
+        holding_position = buysell_signal.cumsum().values
+        buysell_price = close[np.sum(np.abs(buysell_signal_df.values),axis=1)>0,:]
+        price_diff = np.diff(close, axis=0)
+        per_return_array = np.zeros(close.shape)
+        per_return_array[1:,:] = price_diff / close[:-1, :]
+        buysell_rate = commission_rate_buy + commission_rate_sell
+        total_return = np.zeros(close.shape)
+
+        index = buysell_signal.index
+        buysell_signal_arr = buysell_signal.values
+        for i in range(buysell_signal.shape[1]):
+            unit = abs(buysell_signal.values[:,i][0])
             for j in range(1, index.shape[0]):
-                if (buysell_signal[index[j]] == -1 and holding_position[index[j - 1]] == 1):
-                    total_return[index[j]] = buysell_price[index[j]] / buysell_price[index[j - 1]] - 1 - buysell_rate
-                elif (buysell_signal[index[j]] == -2 and holding_position[index[j - 1]] == 1):
-                    total_return[index[j]] = buysell_price[index[j]] / buysell_price[index[j - 1]] - 1 - buysell_rate
-                elif (buysell_signal[index[j]] == 1 and holding_position[index[j - 1]] == -1):
-                    total_return[index[j]] = 1 - buysell_price[index[j]] / buysell_price[index[j - 1]] - buysell_rate
-                elif (buysell_signal[index[j]] == 2 and holding_position[index[j - 1]] == -1):
-                    total_return[index[j]] = 1 - buysell_price[index[j]] / buysell_price[index[j - 1]] - buysell_rate
-            compound_return_list.append(total_return)
-        return compound_return_list
+                if (buysell_signal_arr[j,i] == -unit and holding_position[j - 1,i] == unit):
+                    total_return[index[j],i] = buysell_price[j,i] / buysell_price[j - 1,i] - 1 - buysell_rate
+                elif (buysell_signal_arr[j,i] == -2*unit and holding_position[j - 1,i] == unit):
+                    total_return[index[j],i] = buysell_price[j,i] / buysell_price[j - 1,i] - 1 - buysell_rate
+                elif (buysell_signal_arr[j,i] == unit and holding_position[j - 1,i] == -unit):
+                    total_return[index[j],i] = 1 - buysell_price[j,i] / buysell_price[j - 1,i] - buysell_rate
+                elif (buysell_signal_arr[j,i] == 2*unit and holding_position[j - 1,i] == -unit):
+                    total_return[index[j],i] = 1 - buysell_price[j,i] / buysell_price[j - 1,i] - buysell_rate
+
+        return total_return
+
+
+        # for i in range(2):
+        #     total_return = pd.Series([0.0] * close_focused.shape[0])
+        #     BuySell_signal = buysell_signal_list[i]
+        #     price = close_focused.iloc[:, i]
+        #     buysell_signal = BuySell_signal[BuySell_signal != 0]
+        #     holding_position = np.cumsum(buysell_signal)
+        #     buysell_price = price[BuySell_signal != 0]
+        #     buysell_price_return = pd.Series([0] * buysell_price.shape[0])
+        #     buysell_price_return[1:] = np.diff(buysell_price) / buysell_price[:-1]
+        #     # iterate the price series, which only contains buy and sell points.
+        #     buysell_rate = commission_rate_buy + commission_rate_sell
+        #     index = buysell_signal.index
+        #     for j in range(1, index.shape[0]):
+        #         if (buysell_signal[index[j]] == -1 and holding_position[index[j - 1]] == 1):
+        #             total_return[index[j]] = buysell_price[index[j]] / buysell_price[index[j - 1]] - 1 - buysell_rate
+        #         elif (buysell_signal[index[j]] == -2 and holding_position[index[j - 1]] == 1):
+        #             total_return[index[j]] = buysell_price[index[j]] / buysell_price[index[j - 1]] - 1 - buysell_rate
+        #         elif (buysell_signal[index[j]] == 1 and holding_position[index[j - 1]] == -1):
+        #             total_return[index[j]] = 1 - buysell_price[index[j]] / buysell_price[index[j - 1]] - buysell_rate
+        #         elif (buysell_signal[index[j]] == 2 and holding_position[index[j - 1]] == -1):
+        #             total_return[index[j]] = 1 - buysell_price[index[j]] / buysell_price[index[j - 1]] - buysell_rate
+        #     compound_return_list.append(total_return)
+        # return compound_return_list
+
+    # def get_compound_return(self):
+    #     price_focused_list = self.cta.price_df_list
+    #     commission_rate_buy, commission_rate_sell = self.buy_commission_rate, self.sell_commission_rate
+    #     open_focused, high_focused, low_focused, close_focused = \
+    #         price_focused_list[0], price_focused_list[1], price_focused_list[2], price_focused_list[3]
+    #     compound_return_list = []
+    #     buysell_signal_list = self.get_buysell_signal()
+    #     for i in range(2):
+    #         total_return = pd.Series([0.0] * close_focused.shape[0])
+    #         BuySell_signal = buysell_signal_list[i]
+    #         price = close_focused.iloc[:, i]
+    #         buysell_signal = BuySell_signal[BuySell_signal != 0]
+    #         holding_position = np.cumsum(buysell_signal)
+    #         buysell_price = price[BuySell_signal != 0]
+    #         buysell_price_return = pd.Series([0] * buysell_price.shape[0])
+    #         buysell_price_return[1:] = np.diff(buysell_price) / buysell_price[:-1]
+    #         # iterate the price series, which only contains buy and sell points.
+    #         buysell_rate = commission_rate_buy + commission_rate_sell
+    #         index = buysell_signal.index
+    #         for j in range(1, index.shape[0]):
+    #             if (buysell_signal[index[j]] == -1 and holding_position[index[j - 1]] == 1):
+    #                 total_return[index[j]] = buysell_price[index[j]] / buysell_price[index[j - 1]] - 1 - buysell_rate
+    #             elif (buysell_signal[index[j]] == -2 and holding_position[index[j - 1]] == 1):
+    #                 total_return[index[j]] = buysell_price[index[j]] / buysell_price[index[j - 1]] - 1 - buysell_rate
+    #             elif (buysell_signal[index[j]] == 1 and holding_position[index[j - 1]] == -1):
+    #                 total_return[index[j]] = 1 - buysell_price[index[j]] / buysell_price[index[j - 1]] - buysell_rate
+    #             elif (buysell_signal[index[j]] == 2 and holding_position[index[j - 1]] == -1):
+    #                 total_return[index[j]] = 1 - buysell_price[index[j]] / buysell_price[index[j - 1]] - buysell_rate
+    #         compound_return_list.append(total_return)
+    #     return compound_return_list
+
     def get_return_for_unitTime(self,):
         if self.return_for_unitTime_flag == 0:
             last_time_point = self.start_time
-            datetime_focused = self.datetime_focused
+            datetime = self.datetime.iloc[:,0].values
             end_time = self.end_time
             cur_time_point = tool.currentTime_forward_delta(self.start_time, self.minutes_in_uninTime)
             return_for_unitTime_list = []
             unitEndTime_list = []
-            single_return_list = self.get_single_return()
-            single_return_add = single_return_list[0] + single_return_list[1]
+            single_return_array = self.get_single_return()
+            single_return_sum = np.sum(single_return_array,axis=1)
             # datetime_focused.reshape(datetime_focused.size())
             while last_time_point < end_time:
-                idx1 = (datetime_focused >= int(last_time_point))
-                idx2 = (datetime_focused < int(cur_time_point))
-                unitTime_totalreturn = np.sum(single_return_add[(idx1 & idx2)])
+                idx1 = (datetime >= int(last_time_point))
+                idx2 = (datetime < int(cur_time_point))
+                unitTime_totalreturn = np.sum(single_return_sum[(idx1 & idx2)])
                 unitEndTime_list.append(cur_time_point)
                 return_for_unitTime_list.append(unitTime_totalreturn)
                 last_time_point = cur_time_point
                 cur_time_point = tool.currentTime_forward_delta(cur_time_point, self.minutes_in_uninTime)
-                # print('%s'%currTime)
             if unitEndTime_list[-1] > end_time:
                 unitEndTime_list.pop()
                 unitEndTime_list.append(end_time)
-            self.return_for_unitTime_list = pd.Series(return_for_unitTime_list)
-            self.unitEndTime_list = pd.Series(unitEndTime_list)
+            # print(return_for_unitTime_list)
+            self.return_for_unitTime_list = (return_for_unitTime_list)
+            self.unitEndTime_list = (unitEndTime_list)
             self.return_for_unitTime_flag = 1
         return self.return_for_unitTime_list,self.unitEndTime_list
-
+    # def get_return_for_unitTime(self,):
+    #     if self.return_for_unitTime_flag == 0:
+    #         last_time_point = self.start_time
+    #         datetime_focused = self.datetime_focused
+    #         end_time = self.end_time
+    #         cur_time_point = tool.currentTime_forward_delta(self.start_time, self.minutes_in_uninTime)
+    #         return_for_unitTime_list = []
+    #         unitEndTime_list = []
+    #         single_return_list = self.get_single_return()
+    #         single_return_add = single_return_list[0] + single_return_list[1]
+    #         # datetime_focused.reshape(datetime_focused.size())
+    #         while last_time_point < end_time:
+    #             idx1 = (datetime_focused >= int(last_time_point))
+    #             idx2 = (datetime_focused < int(cur_time_point))
+    #             unitTime_totalreturn = np.sum(single_return_add[(idx1 & idx2)])
+    #             unitEndTime_list.append(cur_time_point)
+    #             return_for_unitTime_list.append(unitTime_totalreturn)
+    #             last_time_point = cur_time_point
+    #             cur_time_point = tool.currentTime_forward_delta(cur_time_point, self.minutes_in_uninTime)
+    #             # print('%s'%currTime)
+    #         if unitEndTime_list[-1] > end_time:
+    #             unitEndTime_list.pop()
+    #             unitEndTime_list.append(end_time)
+    #         self.return_for_unitTime_list = pd.Series(return_for_unitTime_list)
+    #         self.unitEndTime_list = pd.Series(unitEndTime_list)
+    #         self.return_for_unitTime_flag = 1
+    #     return self.return_for_unitTime_list,self.unitEndTime_list
     def get_average_annual_return(self,total_return, datetime_focused, start_time, end_time):
         return_for_unitTime_list,unitTime_list = self.get_return_for_unitTime(total_return, datetime_focused, start_time, end_time)
 
     def get_max_drawdown(self,):
 
         return_for_unitTime_list,unitTime_list = self.get_return_for_unitTime()
-        return_for_unitTime_series = pd.Series(return_for_unitTime_list)
-        return_for_unitTime_cum = np.cumsum(return_for_unitTime_series)+1
+        # return_for_unitTime_series = pd.Series(return_for_unitTime_list)
+        return_for_unitTime_cum = np.cumsum(return_for_unitTime_list)+1
 
         cum_max = np.maximum.accumulate(return_for_unitTime_cum)
         dd_array = return_for_unitTime_cum/cum_max-1
@@ -131,7 +255,7 @@ class Indicator:
 
         dd_startTime = unitTime_list[dd_start_idx]
         dd_endTime = unitTime_list[dd_end_idx]
-        max_dd = round(max_dd*100,2)
+        # max_dd = round(max_dd*100,2)
         dd_startTime = dd_startTime[:-4]
         dd_endTime = dd_endTime[:-4]
         return max_dd,dd_startTime,dd_endTime
@@ -139,33 +263,28 @@ class Indicator:
     def get_margin_bp(self):
         total_turnover = self.get_total_turnover()
         mg_bp = self.get_total_return()/total_turnover
-        mg_bp = round(mg_bp*100,2)
+        # mg_bp = round(mg_bp*100,2)
         return mg_bp
     def get_return_divide_dd(self,):
         max_dd, a ,b  = self.get_max_drawdown()
         self.return2dd = self.get_total_return() / abs(max_dd)
-        self.return2dd = round(self.return2dd,2)
+        # self.return2dd = round(self.return2dd,2)
         return self.return2dd
     def get_total_return(self):
-        single_return_list = self.get_single_return()
-        total_return = np.sum(single_return_list[0]+single_return_list[1])
-        total_return = round(total_return * 100, 4)
+        single_return_array = self.get_single_return()
+        # row_total_return = np.sum(single_return_array,axis=1)
+        total_return = np.sum(single_return_array)
+        # total_return = round(total_return * 100, 4)
         return total_return
     def get_total_turnover(self,):
-        buysell_signal_list = self.get_buysell_signal()
-        turn_over = 0.0
-        for i in range(len(buysell_signal_list)):
-            buysell_signal = buysell_signal_list[i]
-            # turn_over  += np.sum(buysell_signal[buysell_signal>0])
-            turn_over += np.sum(np.abs(buysell_signal))
-
-        self.turn_over = turn_over
-        return self.turn_over
+        buysell_signal_array = self.get_buysell_signal()
+        turn_over = np.sum(np.abs(buysell_signal_array))
+        return turn_over
     def get_mean_turnover(self):
         total_turnover = self.get_total_turnover()
         return_for_unitTime_list, unitEndTime_list = self.get_return_for_unitTime()
         mean_turnover = float(total_turnover)/len(unitEndTime_list)
-        mean_turnover = round(mean_turnover * 100, 2)
+        # mean_turnover = round(mean_turnover * 100, 2)
         return mean_turnover
     def get_sharp(self, ):
         return_for_day_list,unitTime_list = self.get_return_for_unitTime()
