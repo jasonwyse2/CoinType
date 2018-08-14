@@ -15,12 +15,6 @@ class Simulation(SimulationBasic):
         datetime_focused = self.datetime_focused.iloc[:, 0].values
         instrument_focused = self.instrument_focused.values
 
-        # open, high, low, close = self.price_df_list[0].values, self.price_df_list[1].values, \
-        #                          self.price_df_list[2].values, self.price_df_list[3].values
-        # volume = self.volume.values
-        # datetime = self.datetime.iloc[:,0].values
-        # instrument = self.instrument.values
-
         position_signal_focused = np.zeros(self.instrument_focused.shape)
 
         two_contract_diff = close_focused[:, 0] - close_focused[:, 1]
@@ -59,7 +53,7 @@ class Simulation(SimulationBasic):
                     if position_signal_focused[i-1][0] == 1:
                         position_signal_focused[i][0] = 0
                         position_signal_focused[i][1] = 0
-                if two_contract_diff[i] > floor_price[i] and two_contract_diff[i] <= clear_floor[i]:
+                if two_contract_diff[i] <= clear_floor[i] and two_contract_diff[i] > floor_price[i]:
                     if position_signal_focused[i-1][0] == -1:
                         position_signal_focused[i][0] = 0
                         position_signal_focused[i][1] = 0
@@ -75,8 +69,8 @@ if __name__ == '__main__':
     cta.end_time =   '201808130000'
     cta.coin_list = ['btc', 'bch','eth', 'etc', 'eos']#  'btc', 'bch','eth', 'etc', 'eos'
     cta.weight_list = [50,50]
-    # cta.strategy_name = 'medium-'+'-'+str(cta.weight_list[1]) #[ceilfloor,medium,half-stdnum,threeQuarters-stdnum]
-    cta.strategy_name = 'medium-'+str(cta.weight_list[0])+'-'+str(cta.weight_list[1])
+    # cta.strategy_name = 'medium-'+str(cta.weight_list[0])+'-'+str(cta.weight_list[1])
+    cta.strategy_name = 'medium'
     cta.window_period_list = [5000] #
     cta.std_num_list = [3] #2.5, 3, 3.25, 3.5, 3.75, 4
 

@@ -8,6 +8,7 @@ from tool import *
 import pymysql
 from indicator import Indicator
 import tool
+from const import const
 class Data:
     db_host_list = ['192.168.0.113', '206.189.89.22', '192.168.0.113', '127.0.0.1']  # 192.168.0.113, 206.189.89.22
     db_port_list = [3306, 5555, 3306, 3306]  # 3306 , 5555
@@ -15,14 +16,10 @@ class Data:
     db_pass_list = ['1qazxsw2', '123456', '1qazxsw2', '1qazxsw2']  # 1qazxsw2, 123456
     db_name_list = ['okex', 'tradingdata', 'yg', 'okex']  # okcoin, tradingdata
 
-    contract_timeType = ['week', 'nextweek', 'quarter']
-    __fourPrice_type_list = ['open', 'high', 'low', 'close']
-    # 'btc', 'bch', 'eth', 'etc', 'eos'
-    coinType_list = ['bch', 'btc', 'eos', 'etc', 'eth']#['bch', 'btc', 'eos', 'etc', 'eth']  # do not change this variable
     one_week_seconds = 7 * 24 * 3600
     db_table = '1min'
     def __init__(self):
-        pass
+        self.conn = self.login_MySQL(3)
     def login_MySQL(self,num):
         db_host = self.db_host_list[num]
         db_port = self.db_port_list[num]
@@ -53,7 +50,7 @@ class Data:
 
     def get_datetime_allUnique_df(self,start_time, end_time):
         db_table = self.db_table
-        conn = self.login_MySQL(3)
+        conn = self.conn
         field_list = ['datetime']
         fields = ','.join(field_list)
         sql = 'SELECT '+ fields +' FROM okex.' + db_table + \
@@ -62,7 +59,7 @@ class Data:
         return df
 
     def get_columns_cointype_df(self,coinType, start_time, end_time):
-        conn = self.login_MySQL(3)
+        conn = self.conn
         field_list = ['open', 'high', 'low','close', 'datetime', 'instrument', 'volume']
         fields = ','.join(field_list)
         sql_datetime = 'SELECT '+fields+' FROM okex.' + self.db_table +\
@@ -107,7 +104,7 @@ class Data:
         instrument = datetime.copy()
         volume = datetime.copy()
         one_week_seconds = self.one_week_seconds
-        for coin_Type in self.coinType_list:
+        for coin_Type in const.coinType_list:
             df = self.get_columns_cointype_df(coin_Type, start_time, end_time)
             df['instrument_precise'] = df.instrument.map(lambda x: x[len(coin_Type) + 1:] + '1600')
             # transfer 'datetime' and instrument into date format
@@ -144,14 +141,14 @@ class Data:
                 append_df_to_file(datetime_added,data_dir,filename='datetime')
                 append_df_to_file(instrument_added, data_dir, filename='instrument')
                 append_df_to_file(volume_added, data_dir, filename='volume')
-                p_list = self.__fourPrice_type_list
+                p_list = const.fourPrice_type_list
                 for i in range(len(p_list)):
                     append_df_to_file(price_df_list_added[i], data_dir, filename=p_list[i])
 
     def get_data(self, start_time, end_time, data_dir):
         time_start = time.clock()
         flag = mkdir(data_dir)
-        p_list = self.__fourPrice_type_list
+        p_list = const.fourPrice_type_list
         if flag == 0 or not os.listdir(data_dir):
             [price_df_list, instrument, volume,datetime] = self.quick_datetime_symbol(start_time, end_time)
 
@@ -174,7 +171,7 @@ class Data:
         index_range2 = datetime_array < int(end_time)
         index_range = index_range1&index_range2
         price_df_list = []
-        for price_type in self.__fourPrice_type_list:
+        for price_type in const.fourPrice_type_list:
             fileName_price = price_type + '.csv'
             fullfileName_price = os.path.join(dest_dir, fileName_price)
             price = pd.read_csv(fullfileName_price).iloc[:,1:]
@@ -461,6 +458,7 @@ class SimulationBasic:
         perf_res = pd.DataFrame(self.indi_list_list)
         perf_res.columns = cols
         print perf_res
+
     def get_average_result_list(self,results_tag_list):
         if self.__average_result_tag ==0:
             average_result_list = []
@@ -479,6 +477,7 @@ class SimulationBasic:
             seq = ['average', self.two_contract[0], self.two_contract[1], self.strategy_name, self.results_tag_list[i]]
             self.write_result_to_file(self.result_dir, seq, average_array, index=self.window_period_list,
                                       columns=self.std_num_list)
+
     def get_average_position_signal_array(self):
         position_signal_array_list = self.position_signal_array_list
         average_position_signal_array = np.zeros(position_signal_array_list[0].shape)
@@ -490,6 +489,7 @@ class SimulationBasic:
         divisor_array = np.array([divisor] * rows * cols).reshape((rows, cols))
         average_position_signal_array_norm = average_position_signal_array / divisor_array
         return average_position_signal_array_norm
+
     def start(self):
         self.indi_list_list = []
         for coinType in self.coin_list:
@@ -525,34 +525,6 @@ class SimulationBasic:
         perf_df = pd.DataFrame(self.indi_list_list)
         perf_df.columns = cols
         print(perf_df)
-        # self.average_result()
-        # self.write_indicator_to_file()
-    def get_buysell_signal(self, position_signal_focused):
-
-        position_diff_array = np.diff(position_signal_focused, axis=0)
-        buysell_signal_focused = np.zeros(self.instrument_focused.shape)
-        # buysell_signal_focused[2:,:] = position_diff_array[:-1,:]
-        buysell_signal_focused[1:, :] = position_diff_array
-        return buysell_signal_focused
-    def map_buysell_signal_focused_to_position_signal_array(self,buysell_signal_focused,buysell_signal_array):
-        price = self.price_df_list_nan[3].values
-
-        coinType = self.coinType
-        two_contract = self.two_contract
-        idx1 = self.get_coinType_contractType_index(coinType, two_contract[0])
-        idx2 = self.get_coinType_contractType_index(coinType, two_contract[1])
-        self.idx1, self.idx2 = idx1, idx2
-        price_diff = price[:, idx1] - price[:, idx2]
-
-        values_pos = self.position_signal_focused[self.position_signal_focused != 0].reshape((-1, 2))
-        # position_signal_array = self.get_positon_signal_array()
-        index = self.volume_focused.index.values
-        buysell_signal_array[index, idx1] += buysell_signal_focused[:, 0]
-        buysell_signal_array[index, idx2] += buysell_signal_focused[:, 1]
-
-        index = np.argwhere(buysell_signal_array!=0)
-        values = buysell_signal_array[buysell_signal_array!=0].reshape((-1,2))
-        return buysell_signal_array
 
     def roll_test(self,):
 

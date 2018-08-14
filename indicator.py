@@ -21,7 +21,6 @@ class Indicator:
         self.single_return_array = np.zeros(self.position_signal_array.shape)
         self.compound_return_array = np.zeros(self.position_signal_array.shape)
     def normalize_position_signal_array(self):
-
         position_signal_array = self.position_signal_array.copy()
         divisor = len(self.cta.coin_list)*len(self.cta.window_period_list)*len(self.cta.std_num_list)
         row_sum_array = np.sum(np.absolute(position_signal_array),axis = 1)
@@ -149,33 +148,7 @@ class Indicator:
             self.unitEndTime_list = (unitEndTime_list)
             self.return_for_unitTime_flag = 1
         return self.return_for_unitTime_list,self.unitEndTime_list
-    # def get_return_for_unitTime(self,):
-    #     if self.return_for_unitTime_flag == 0:
-    #         last_time_point = self.start_time
-    #         datetime_focused = self.datetime_focused
-    #         end_time = self.end_time
-    #         cur_time_point = tool.currentTime_forward_delta(self.start_time, self.minutes_in_uninTime)
-    #         return_for_unitTime_list = []
-    #         unitEndTime_list = []
-    #         single_return_list = self.get_single_return()
-    #         single_return_add = single_return_list[0] + single_return_list[1]
-    #         # datetime_focused.reshape(datetime_focused.size())
-    #         while last_time_point < end_time:
-    #             idx1 = (datetime_focused >= int(last_time_point))
-    #             idx2 = (datetime_focused < int(cur_time_point))
-    #             unitTime_totalreturn = np.sum(single_return_add[(idx1 & idx2)])
-    #             unitEndTime_list.append(cur_time_point)
-    #             return_for_unitTime_list.append(unitTime_totalreturn)
-    #             last_time_point = cur_time_point
-    #             cur_time_point = tool.currentTime_forward_delta(cur_time_point, self.minutes_in_uninTime)
-    #             # print('%s'%currTime)
-    #         if unitEndTime_list[-1] > end_time:
-    #             unitEndTime_list.pop()
-    #             unitEndTime_list.append(end_time)
-    #         self.return_for_unitTime_list = pd.Series(return_for_unitTime_list)
-    #         self.unitEndTime_list = pd.Series(unitEndTime_list)
-    #         self.return_for_unitTime_flag = 1
-    #     return self.return_for_unitTime_list,self.unitEndTime_list
+
     def get_average_annual_return(self,total_return, datetime_focused, start_time, end_time):
         return_for_unitTime_list,unitTime_list = self.get_return_for_unitTime(total_return, datetime_focused, start_time, end_time)
 
