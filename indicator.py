@@ -14,10 +14,13 @@ class Indicator:
     __sigleton_single_return_flag = 0
     def __init__(self,cta,position_signal_array):
         self.cta = cta
-        self.position_signal_array = position_signal_array
+
         self.datetime = cta.datetime
         self.start_time = cta.start_time
         self.end_time = cta.end_time
+        datetime_start_idx = cta.datetime[cta.datetime.values == int(self.start_time)].index.tolist()[0]
+        position_signal_array[:datetime_start_idx, :] = 0.
+        self.position_signal_array = position_signal_array
         self.single_return_array = np.zeros(self.position_signal_array.shape)
         self.compound_return_array = np.zeros(self.position_signal_array.shape)
     def normalize_position_signal_array(self):
@@ -48,16 +51,20 @@ class Indicator:
             window_period = self.cta.window_period
             datetime = self.datetime
             datetime_period = self.cta.datetime_focused.iloc[window_period,0]
-            period = datetime[datetime.values==datetime_period].index.tolist()[0]
+
+            # period = datetime[datetime.values==datetime_period].index.tolist()[0]
             open, high, low, close = self.cta.price_df_list[0].values, self.cta.price_df_list[1].values, \
                                           self.cta.price_df_list[2].values, self.cta.price_df_list[3].values
             price_diff = np.diff(close,axis=0)
             per_return_array = np.zeros(close.shape)
             per_return_array[1:,:] = price_diff / close[:-1,:]
-            commission_array = np.zeros(close.shape)
+            per_return_array[np.isnan(per_return_array)]=0
+            # commission_array = np.zeros(close.shape)
             buysell_signal_array = self.get_buysell_signal()
-            commission_array[period:, :] = np.abs(buysell_signal_array[period:, :]) * self.cta.buy_commission_rate
-            self.single_return_array[period:-1,:] = position_signal_array[period:-1,:]*per_return_array[period+1:]-commission_array[period:-1, :]
+            # commission_array[period:, :] = np.abs(buysell_signal_array[period:, :]) * self.cta.buy_commission_rate
+            commission_array = np.abs(buysell_signal_array) * self.cta.buy_commission_rate
+            # self.single_return_array[period:-1,:] = position_signal_array[period:-1,:]*per_return_array[period+1:]-commission_array[period:-1, :]
+            self.single_return_array[:-1,:] = position_signal_array[:-1, :] * per_return_array[1:,:] - commission_array[:-1,:]
 
             self.__sigleton_single_return_flag = 1
         return self.single_return_array
@@ -79,7 +86,6 @@ class Indicator:
         per_return_array[1:,:] = price_diff / close[:-1, :]
         buysell_rate = commission_rate_buy + commission_rate_sell
         total_return = np.zeros(close.shape)
-
         index = buysell_signal.index
         buysell_signal_arr = buysell_signal.values
         for i in range(buysell_signal.shape[1]):
@@ -178,14 +184,20 @@ class Indicator:
 
     def get_margin_bp(self):
         total_turnover = self.get_total_turnover()
-        mg_bp = self.get_total_return()/total_turnover
-        mg_bp = round(mg_bp*100,2)
+        if total_turnover!=0:
+            mg_bp = self.get_total_return()/total_turnover
+            mg_bp = round(mg_bp*100,2)
+        else:
+            mg_bp=0
         return mg_bp
     def get_return_divide_dd(self,):
         max_dd, a ,b  = self.get_max_drawdown()
-        self.return2dd = self.get_total_return() / abs(max_dd)
-        self.return2dd = round(self.return2dd,2)
-        return self.return2dd
+        if max_dd!=0:
+            return2dd = self.get_total_return() / abs(max_dd)
+            return2dd = round(return2dd,2)
+        else:
+            return2dd = 10000
+        return return2dd
     def get_total_return(self):
         single_return_array = self.get_single_return()
         total_return = np.sum(single_return_array)
@@ -198,8 +210,11 @@ class Indicator:
     def get_mean_turnover(self):
         total_turnover = self.get_total_turnover()
         return_for_unitTime_list, unitEndTime_list = self.get_return_for_unitTime()
-        mean_turnover = float(total_turnover)/len(unitEndTime_list)
-        mean_turnover = round(mean_turnover * 100, 2)
+        if total_turnover!=0:
+            mean_turnover = float(total_turnover)/len(unitEndTime_list)
+            mean_turnover = round(mean_turnover * 100, 2)
+        else:
+            mean_turnover=0
         return mean_turnover
     def get_sharp(self, ):
         return_for_day_list,unitTime_list = self.get_return_for_unitTime()

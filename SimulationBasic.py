@@ -128,8 +128,6 @@ class Data:
         price_df_list = [datetime_open, datetime_high, datetime_low, datetime_close]
         return [price_df_list, instrument, volume,datetime]
 
-    def append_df_to_file(self):
-        pass
     def check_update_data(self,end_time,data_dir):
 
         datetime = self.load_datetime_from_file(data_dir)
@@ -145,7 +143,7 @@ class Data:
                 for i in range(len(p_list)):
                     append_df_to_file(price_df_list_added[i], data_dir, filename=p_list[i])
 
-    def get_data(self, start_time, end_time, data_dir):
+    def get_data_from_database_to_file(self, start_time, end_time, data_dir):
         time_start = time.clock()
         flag = mkdir(data_dir)
         p_list = const.fourPrice_type_list
@@ -194,24 +192,14 @@ class Data:
         return datetime
 
 class SimulationBasic:
-    __contract_map = {'week': 0, 'nextweek': 1, 'quarter': 2}
-    strategy_coefficient_dict = {'ceilfloor': 1, 'half-stdnum': 0.5, 'medium': 0, 'threeQuarters-stdnum': 0.75}
-    __coinType_list = ['bch', 'btc', 'eos', 'etc', 'eth']#['bch', 'btc', 'eos', 'etc', 'eth']  # do not change this variable
-    __fourPrice_type_list = ['open', 'high', 'low', 'close']
-    __project_dir = os.path.abspath(os.path.join(os.getcwd(), ".."))
-    __root_data = os.path.join(__project_dir, 'data')
-    __root_result = os.path.join(__project_dir, 'backtest')
-    # __root_average = os.path.join(__project_dir, 'average')
-    __root_buysellInfo = os.path.join(__project_dir, 'buysell')
+    project_dir = os.path.abspath(os.path.join(os.getcwd(), ".."))
     __directory_singleton_flag = 0
-    __average_result_tag= 0
-    __position_signal_array_flag=0
-    __buysell_signal_array_flag = 0
+    __average_result_tag = 0
     indi_list_list = []
     position_signal_array_list = []
-    start_time = '201806160000'
+    start_time0 = '201806160000'
+    start_time = start_time0
     db_table = '1min'  # ['1min','5min']
-    three_contract = ['week', 'nextweek', 'quarter']
     buy_commission_rate = 0.0000
     sell_commission_rate = 0.0000
     timestamp = 0
@@ -221,27 +209,21 @@ class SimulationBasic:
     def __init__(self,):
         if not hasattr(self, 'end_time'):
             self.end_time = dt.now().strftime('%Y%m%d')+'0000'
-    def initialize_variables(self):
-        if self.__sigleton_variable_flag==0:
-            self.buysell_signal_array = np.zeros(self.position_signal_array.shape)
-            self.single_return_array = np.zeros(self.position_signal_array.shape)
-    @property
-    def project_dir(self):
-        return self.__project_dir
-    @project_dir.setter
-    def project_dir(self,value):
-        self.__project_dir = value
+        self.__root_data = os.path.join(self.project_dir, 'data')
+        self.__root_result = os.path.join(self.project_dir, 'backtest')
+        self.__root_buysellInfo = os.path.join(self.project_dir, 'buysell')
 
     def get_coinType_contractType_index(self,coinType,contractType):
-        column_offset = self.__coinType_list.index(coinType) * 3
-        contract_idx = self.__contract_map[contractType]
+        column_offset = const.coinType_list.index(coinType) * 3
+        contract_idx = const.contract_map[contractType]
         idx = column_offset + contract_idx
         return idx
+
     def set_directory(self, start_time, end_time, strategy_name):
         # Singleton mode, this function can only be called once
         if self.__directory_singleton_flag == 0:
             db_table = self.__data.db_table
-            father_dir = self.__project_dir
+            father_dir = self.project_dir
             root_data = os.path.join(father_dir, 'data')
             root_result = os.path.join(father_dir, 'backtest')
             root_buysellInfo = os.path.join(father_dir, 'buysell')
@@ -262,6 +244,7 @@ class SimulationBasic:
             mkdir(self.buysell_dir)
 
             self.__directory_singleton_flag = 1
+
     def is_delivery_time(self, instrument, date_time):
         time_instrument = dt.strptime(instrument[4:] + '1600',"%Y%m%d%H%M")
         time_datetime = dt.strptime(str(date_time),"%Y%m%d%H%M")
@@ -272,56 +255,57 @@ class SimulationBasic:
         return delivery_time
 
     def generate_position_signal(self,):
+        pass
 
-        [window_period, std_num, strategy_name] = [self.window_period, self.std_num, self.strategy_name]
-        open, high, low, close = self.price_focused_list[0].values, self.price_focused_list[1].values, \
-                                 self.price_focused_list[2].values, self.price_focused_list[3].values
+    def stop_loss_win(self,position_signal_focused):
+        open_focused, high_focused,\
+        low_focused, close_focused = self.price_focused_list[0].values, self.price_focused_list[1].values, \
+                        self.price_focused_list[2].values, self.price_focused_list[3].values
         volume_focused = self.volume_focused.values
-        datetime_focused = self.datetime_focused.values
+        datetime_focused = self.datetime_focused.iloc[:, 0].values
         instrument_focused = self.instrument_focused.values
 
-        two_contract_diff = close[:, 0] - close[:, 1]
-        period_mean = (pd.Series(two_contract_diff).rolling(window_period).mean()).values
-        period_std = (pd.Series(two_contract_diff).rolling(window_period).std()).values
-        ceil_price = period_mean + period_std * std_num
-        floor_price = period_mean - period_std * std_num
+        price = close_focused
+        buysell_rate = self.buy_commission_rate
+        unit = 0.5
+        loss_threshold = self.loss_threshold
+        i1 = 0
+        i2 = 1
+        first_hold_idx = np.argwhere(position_signal_focused[:,0]!=0)[0][0]
+        for j in range(first_hold_idx+1, position_signal_focused.shape[0]):
+            if (position_signal_focused[first_hold_idx,i1] == -1*unit and position_signal_focused[j,i1] == -1*unit):
+                total_return1 = 1-price[j,i1] / price[first_hold_idx,i1] - buysell_rate
+                total_return2 = price[j, i2] / price[first_hold_idx, i2] - 1 - buysell_rate
+                total_return = (total_return1+total_return2)*0.5
+                if(total_return<-loss_threshold):
+                    if not hasattr(self, 'cool_time'):
+                        cool_time = np.argwhere(position_signal_focused[j:,i1] != position_signal_focused[j,i1])[0][0]
+                    else:
+                        cool_time = self.cool_time
+                    position_signal_focused[j:j+cool_time,:]=0.
+                    tmp = np.argwhere(position_signal_focused[j:, 0] != 0)
+                    if len(tmp)==0:
+                        break
 
-        cleartype_coefficient = 0.5
-        clear_ceil = period_mean + period_std * std_num * cleartype_coefficient
-        clear_floor = period_mean - period_std * std_num * cleartype_coefficient
+                    offset = np.argwhere(position_signal_focused[j:, 0] != 0)[0][0]
+                    first_hold_idx = offset+j
 
-        position_signal1 = np.array([0] * two_contract_diff.shape[0])
-        position_signal2 = np.array([0] * two_contract_diff.shape[0])
-        instrument_contract1, instrument_contract2 = \
-            instrument_focused[:, 0], instrument_focused[:, 1]
-        for i in range(window_period - 1, period_mean.shape[0]):
-            delivery_time1 = self.is_delivery_time(instrument_contract1[i], datetime_focused[i])
-            delivery_time2 = self.is_delivery_time(instrument_contract2[i], datetime_focused[i])
-            if delivery_time1 == True or delivery_time2 == True:
-                position_signal1[i] = 0
-                position_signal2[i] = 0
-            else:
-                if two_contract_diff[i] >= ceil_price[i]:
-                    position_signal1[i] = -1
-                    position_signal2[i] = 1
-
-                elif two_contract_diff[i] <= floor_price[i]:
-                    position_signal1[i] = 1
-                    position_signal2[i] = -1
-                else:
-                    position_signal1[i] = position_signal1[i - 1]
-                    position_signal2[i] = position_signal2[i - 1]
-
-                if two_contract_diff[i] >= clear_ceil[i] and two_contract_diff[i] < ceil_price[i]:
-                    if position_signal1[i - 1] == 1:
-                        position_signal1[i] = 0
-                        position_signal2[i] = 0
-                if two_contract_diff[i] > floor_price[i] and two_contract_diff[i] <= clear_floor[i]:
-                    if position_signal1[i - 1] == -1:
-                        position_signal1[i] = 0
-                        position_signal2[i] = 0
-        position_signal_list = [pd.Series(position_signal1 * 0.5), pd.Series(position_signal2 * 0.5)]
-        return position_signal_list
+            elif (position_signal_focused[first_hold_idx,i1] == unit and position_signal_focused[j,i1] == unit):
+                total_return1 = price[j,i1] / price[first_hold_idx,i1]-1 - buysell_rate
+                total_return2 = 1 - price[j, i2] / price[first_hold_idx, i2] - buysell_rate
+                total_return = (total_return1+total_return2)*0.5
+                if(total_return<-loss_threshold):
+                    if not hasattr(self, 'cool_time'):
+                        cool_time = np.argwhere(position_signal_focused[j:,i1] != position_signal_focused[j,i1])[0][0]
+                    else:
+                        cool_time = self.cool_time
+                    position_signal_focused[j:j+cool_time,:]=0.
+                    tmp = np.argwhere(position_signal_focused[j:, 0] != 0)
+                    if len(tmp)==0:
+                        break
+                    offset = np.argwhere(position_signal_focused[j:, 0] != 0)[0][0]
+                    first_hold_idx = offset+j
+        return position_signal_focused
 
     def get_buysell_info(self,):
         price_df_list = self.price_df_list_nan
@@ -343,87 +327,74 @@ class SimulationBasic:
                                 # 'compound_return2'
                                 ]
         return buysell_info
+
     def fill_NaN_with_previous(self,price_df_list_nan):
         price_df_list = []
         for i in range(len(price_df_list_nan)):
-            price_df = price_df_list_nan[i].copy()
+            price_df = price_df_list_nan[i]
             price_array = (price_df.values).copy()
-
             idx = np.argwhere(np.isnan(price_array))
-
             for j in range(idx.shape[0]):
                 price_array[idx[j][0],idx[j][1]] = price_array[idx[j][0]-1,idx[j][1]]
-
             price_df_list.append(pd.DataFrame(price_array))
         return price_df_list
+
     def get_focused_info(self,):
         data_obj = self.__data
-        data_obj.get_data(self.start_time, self.end_time, self.data_dir)
+        data_obj.get_data_from_database_to_file(self.start_time0, self.end_time, self.data_dir)
         if not hasattr(self, 'price_df_list'):
             self.price_df_list_nan, self.instrument, self.datetime, self.volume = \
-                data_obj.load_data_from_file(self.start_time, self.end_time,self.data_dir)
+                data_obj.load_data_from_file(self.start_time0, self.end_time,self.data_dir)
             self.price_df_list = self.fill_NaN_with_previous(self.price_df_list_nan)
-        column_offset = self.__coinType_list.index(self.coinType) * 3
-        contract1_idx = self.__contract_map[self.two_contract[0]]
-        contract2_idx = self.__contract_map[self.two_contract[1]]
 
-        price_focused_list = []
-        for i in range(len(self.__fourPrice_type_list)):
-            # price = self.price_df_list[i]
+        idx1 = self.get_coinType_contractType_index(self.coinType1,self.two_contract[0])
+        idx2 = self.get_coinType_contractType_index(self.coinType2, self.two_contract[1])
+
+        price_focused_nan_list = []
+        for i in range(len(const.fourPrice_type_list)):
             price = self.price_df_list_nan[i]
             price.columns = range(len(price.columns))
-            price_focused_nan = price[[column_offset + contract1_idx, column_offset + contract2_idx]]
-            price_focused = price_focused_nan.dropna(axis=0, how='any')
-            # price_focused = price_focused_nan
+
+            price_focused_nan = price[[idx1, idx2]]
+            price_focused_nan_list.append(price_focused_nan)
+
+        price_focused_list = []
+        price_focused_0 = price_focused_nan_list[0].dropna(axis=0, how='any')
+        for i in range(len(price_focused_nan_list)):
+            price_focused = price_focused_nan_list[i].iloc[price_focused_0.index.tolist(), :]
             price_focused_list.append(price_focused)
+
         self.instrument.columns = range(len(self.instrument.columns))
         self.volume.columns = range(len(self.volume.columns))
 
-        instrument_focused_nan = self.instrument[[column_offset + contract1_idx, column_offset + contract2_idx]]
-        volume_focused_nan = self.volume[[column_offset + contract1_idx, column_offset + contract2_idx]]
+        instrument_focused_nan = self.instrument[[idx1, idx2]]
+        volume_focused_nan = self.volume[[idx1, idx2]]
         # remove rows that contains 'nan'
-        price_focused = price_focused_list[0]
+        price_focused = price_focused_0
         instrument_focused = instrument_focused_nan.iloc[price_focused.index.tolist(), :]
         datetime_focused = self.datetime.iloc[price_focused.index.tolist(), :]
         volume_focused = volume_focused_nan.iloc[price_focused.index.tolist(), :]
-        # reset index from 0, because some index has been removed
-        # for price_focused in price_focused_list:
-        #     price_focused.index = range(len(price_focused.index))
-        # instrument_focused.index = range(len(instrument_focused.index))
-        # datetime_focused.index = range(len(datetime_focused.index))
-        # volume_focused.index = range(len(volume_focused.index))
-        # # datetime_focused is a 'Dataframe' variable, but it only contains one column, so convert it to Series
-        # datetime_focused = datetime_focused.iloc[:,0]
         return [price_focused_list, volume_focused, instrument_focused, datetime_focused]
-    def get_positon_signal_array(self):
-        if self.__position_signal_array_flag==0:
-            self.position_signal_array = np.zeros(self.instrument.shape)
-            self.__position_signal_array_flag == 1
-        return self.position_signal_array
-    def get_buysell_signal_array(self):
-        if self.__buysell_signal_array_flag==0:
-            self.buysell_signal_array = np.zeros(self.instrument.shape)
-            self.__buysell_signal_array_flag == 1
-        return self.buysell_signal_array
+
     def map_signal_focused_to_array(self, position_signal_focused):
         price = self.price_df_list_nan[3].values
-        # position_signal_array = self.get_positon_signal_array()
-        coinType = self.coinType
+        coinType1 = self.coinType1
+        coinType2 = self.coinType2
         two_contract = self.two_contract
-        idx1 = self.get_coinType_contractType_index(coinType, two_contract[0])
-        idx2 = self.get_coinType_contractType_index(coinType, two_contract[1])
+        idx1 = self.get_coinType_contractType_index(coinType1, two_contract[0])
+        idx2 = self.get_coinType_contractType_index(coinType2, two_contract[1])
         self.idx1,self.idx2 = idx1,idx2
         price_diff = price[:,idx1]-price[:,idx2]
 
-        position_signal_array = self.get_positon_signal_array()
+        position_signal_array = np.zeros(self.instrument.shape)
         index = self.volume_focused.index.values
         position_signal_array[index,idx1] = position_signal_focused[:,0]
         position_signal_array[index,idx2] = position_signal_focused[:,1]
 
         index_row = np.argwhere(np.isnan(price_diff))[:, 0]
         for i in range(len(index_row)):
-            position_signal_array[index_row[i],idx1]=self.position_signal_array[index_row[i]-1,idx1]
-            position_signal_array[index_row[i], idx2] = self.position_signal_array[index_row[i] - 1, idx2]
+            position_signal_array[index_row[i],idx1]=position_signal_array[index_row[i]-1,idx1]
+            position_signal_array[index_row[i], idx2] = position_signal_array[index_row[i] - 1, idx2]
         return position_signal_array
 
     def write_buysell_info_to_file(self, buysell_dir, seq, buysell_info_df):
@@ -459,15 +430,6 @@ class SimulationBasic:
         perf_res.columns = cols
         print perf_res
 
-    def get_average_result_list(self,results_tag_list):
-        if self.__average_result_tag ==0:
-            average_result_list = []
-            for i in range(len(results_tag_list)):
-                average_result_list.append([])
-            self.average_result_list = average_result_list
-            self.__average_result_tag = 1
-        return self.average_result_list
-
     def average_result(self,):
         for i in range(len(self.results_tag_list)):
             sum_array = np.zeros(self.average_result_list[i][0].shape)
@@ -478,38 +440,30 @@ class SimulationBasic:
             self.write_result_to_file(self.result_dir, seq, average_array, index=self.window_period_list,
                                       columns=self.std_num_list)
 
-    def get_average_position_signal_array(self):
-        position_signal_array_list = self.position_signal_array_list
+    def get_average_result_list(self, results_tag_list):
+        if self.__average_result_tag == 0:
+            average_result_list = []
+            for i in range(len(results_tag_list)):
+                average_result_list.append([])
+            self.average_result_list = average_result_list
+            self.__average_result_tag = 1
+        return self.average_result_list
+
+    def get_average_position_signal_array(self,position_signal_array_list):
         average_position_signal_array = np.zeros(position_signal_array_list[0].shape)
         for i in range(len(position_signal_array_list)):
             average_position_signal_array += position_signal_array_list[i]
-
-        divisor = len(self.coin_list) * len(self.window_period_list) * len(self.std_num_list)
+        if self.coinType1==self.coinType2:
+            divisor = len(self.coin_list) * len(self.window_period_list) * len(self.std_num_list)
+        else:
+            divisor = len(self.coin_list)*(len(self.coin_list)-1)*0.5 * len(self.window_period_list) * len(self.std_num_list)
         (rows, cols) = position_signal_array_list[i].shape
         divisor_array = np.array([divisor] * rows * cols).reshape((rows, cols))
         average_position_signal_array_norm = average_position_signal_array / divisor_array
         return average_position_signal_array_norm
 
-    def start(self):
-        self.indi_list_list = []
-        for coinType in self.coin_list:
-            for i in range(len(self.three_contract)):
-                if i == 2:
-                    time_start = time.clock()
-                    two_contract = [self.three_contract[i % 3], self.three_contract[(i + 1) % 3]]
-                    self.two_contract = two_contract
-                    self.coinType = coinType
-                    self.roll_test()
-                    time_end = time.clock()
-                    elapsed = time_end - time_start
-                    print('coinType:%s, two_contract:%s,%s complete! elapsed time is:%s' % (
-                    coinType, two_contract[0], two_contract[1], str(elapsed)))
-
-
-
-        cols = ['cointype', 'window', 'std', 'from', 'to', 'ret', 'tvr', 'sharp', 'ret2dd', 'dd', 'dd_start', 'dd_end',
-                'mg_bp']
-        average_position_signal_array_norm = self.get_average_position_signal_array()
+    def get_performance_list(self,average_position_signal_array_norm):
+        # average_position_signal_array_norm = self.get_average_position_signal_array(self.position_signal_array_list)
         indi_obj = Indicator(self, average_position_signal_array_norm)
         ret = indi_obj.get_total_return()
         mean_tvr = indi_obj.get_mean_turnover()
@@ -520,8 +474,50 @@ class SimulationBasic:
 
         indi_list = ['average', self.window_period, self.std_num, self.start_time[:-4], self.end_time[:-4], ret,
                      mean_tvr, sharp, ret2dd, dd, dd_start, dd_end, mg_bp]
-        self.indi_list_list.append(indi_list)
+        return indi_list
 
+    def start(self):
+        self.indi_list_list = []
+        for i in range(len(self.coin_list)):
+            time_start = time.clock()
+            two_contract = self.two_contract
+            self.coinType1 = self.coin_list[i]
+            self.coinType2 = self.coin_list[i]
+            self.roll_test()
+            time_end = time.clock()
+            elapsed = time_end - time_start
+            print('coinType:%s, two_contract:%s,%s complete! elapsed time is:%s' % (
+            self.coinType1, two_contract[0], two_contract[1], str(elapsed)))
+
+        cols = ['cointype', 'window', 'std', 'from', 'to', 'ret', 'tvr', 'sharp', 'ret2dd', 'dd', 'dd_start', 'dd_end',
+                'mg_bp']
+        average_position_signal_array_norm = self.get_average_position_signal_array(self.position_signal_array_list)
+        indi_list = self.get_performance_list(average_position_signal_array_norm)
+        self.indi_list_list.append(indi_list)
+        perf_df = pd.DataFrame(self.indi_list_list)
+        perf_df.columns = cols
+        print(perf_df)
+
+    def start2(self):
+        self.indi_list_list = []
+        for i in range(len(self.coin_list)):
+            for j in range(i+1,len(self.coin_list)):
+                time_start = time.clock()
+                two_contract = self.two_contract
+                self.coinType1 = self.coin_list[i]
+                self.coinType2 = self.coin_list[j]
+                self.roll_test()
+                time_end = time.clock()
+                elapsed = time_end - time_start
+                print('coinType:%s, two_contract:%s,%s complete! elapsed time is:%s' % (
+                    self.coinType1+'-'+self.coinType2, two_contract[0], two_contract[1], str(elapsed)))
+
+        cols = ['cointype', 'window', 'std', 'from', 'to', 'ret', 'tvr', 'sharp', 'ret2dd', 'dd', 'dd_start', 'dd_end',
+                'mg_bp']
+        average_position_signal_array_norm = self.get_average_position_signal_array(self.position_signal_array_list)
+
+        indi_list = self.get_performance_list(average_position_signal_array_norm)
+        self.indi_list_list.append(indi_list)
         perf_df = pd.DataFrame(self.indi_list_list)
         perf_df.columns = cols
         print(perf_df)
@@ -532,25 +528,27 @@ class SimulationBasic:
         [self.price_focused_list, self.volume_focused,
          self.instrument_focused, self.datetime_focused] = self.get_focused_info()
         results_single_return_bp = np.zeros((len(self.window_period_list), len(self.std_num_list)))
-        results_return_dd = np.zeros((len(self.window_period_list), len(self.std_num_list)))
+        results_return2dd = np.zeros((len(self.window_period_list), len(self.std_num_list)))
         results_turnover = np.zeros((len(self.window_period_list), len(self.std_num_list)))
 
         for i in range(len(self.window_period_list)):
             for j in range(len(self.std_num_list)):
                 self.window_period = self.window_period_list[i]
                 self.std_num = self.std_num_list[j]
+
                 position_signal_focused = self.generate_position_signal()
+                if hasattr(self,'loss_threshold'):
+                    position_signal_focused = self.stop_loss_win(position_signal_focused)
+                self.position_signal_array = self.map_signal_focused_to_array(position_signal_focused)
+                self.position_signal_array_list.append(self.position_signal_array)
 
-                position_signal_array = self.map_signal_focused_to_array(position_signal_focused)
-                self.position_signal_array_list.append(position_signal_array)
-
-                indi_obj = Indicator(self,position_signal_array)
+                indi_obj = Indicator(self,self.position_signal_array)
                 self.buysell_signal_array = indi_obj.get_buysell_signal()
                 # self.compound_return_array = indi_obj.get_compound_return()
                 self.single_return_array = indi_obj.get_single_return()
 
                 self.buysell_info = self.get_buysell_info()
-                seq = [self.coinType, self.two_contract[0], self.two_contract[1], self.strategy_name,
+                seq = [self.coinType1+'-'+self.coinType2, self.two_contract[0], self.two_contract[1], self.strategy_name,
                        str(self.window_period), str(self.std_num)]
                 self.write_buysell_info_to_file(self.buysell_dir, seq, self.buysell_info)
                 seq.append('day-return')
@@ -560,23 +558,21 @@ class SimulationBasic:
                 del seq[-1]
 
                 ret = indi_obj.get_total_return()
-                tvr = indi_obj.get_total_turnover()
                 mean_tvr = indi_obj.get_mean_turnover()
                 dd, dd_start, dd_end = indi_obj.get_max_drawdown()
-                ret_unitTime_list, endtime_list = indi_obj.get_return_for_unitTime()
                 sharp = indi_obj.get_sharp()
                 ret2dd = indi_obj.get_return_divide_dd()
                 mg_bp = indi_obj.get_margin_bp()
 
-                results_return_dd[i][j] = ret2dd
+                results_return2dd[i][j] = ret2dd
                 results_turnover[i][j] = mean_tvr
                 results_single_return_bp[i][j] = mg_bp
-                indi_list = [self.coinType, self.window_period, self.std_num, self.start_time[:-4], self.end_time[:-4], ret,
+                indi_list = [self.coinType1+'-'+self.coinType2, self.window_period, self.std_num, self.start_time[:-4], self.end_time[:-4], ret,
                              mean_tvr, sharp, ret2dd, dd, dd_start, dd_end, mg_bp]
                 self.indi_list_list.append(indi_list)
 
-        seq = [self.coinType, self.two_contract[0], self.two_contract[1], self.strategy_name]
-        results_list = [results_single_return_bp, results_return_dd, results_turnover]
+        seq = [self.coinType1+'-'+self.coinType2, self.two_contract[0], self.two_contract[1], self.strategy_name]
+        results_list = [results_single_return_bp, results_return2dd, results_turnover]
         self.results_tag_list = ['mg-bp', 'ret2dd', 'turnover']
         self.get_average_result_list(self.results_tag_list)
         for i in range(len(results_list)):

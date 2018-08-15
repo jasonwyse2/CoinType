@@ -14,10 +14,15 @@ class Simulation(SimulationBasic):
         volume_focused = self.volume_focused.values
         datetime_focused = self.datetime_focused.iloc[:, 0].values
         instrument_focused = self.instrument_focused.values
-
         position_signal_focused = np.zeros(self.instrument_focused.shape)
+        price_used = np.copy(open_focused)
 
-        two_contract_diff = close_focused[:, 0] - close_focused[:, 1]
+        if self.coinType1==self.coinType2:
+            two_contract_diff = price_used[:, 0] - price_used[:, 1]
+        else:
+            two_contract_diff = np.log(price_used[:, 0]) - np.log(price_used[:, 1])
+            # two_contract_diff = price_used[:, 0] - price_used[:, 1]
+
         period_mean = (pd.Series(two_contract_diff).rolling(window_period).mean()).values
         period_std = (pd.Series(two_contract_diff).rolling(window_period).std()).values
         ceil_price = period_mean + period_std * std_num
@@ -29,10 +34,7 @@ class Simulation(SimulationBasic):
 
         instrument_contract1, instrument_contract2 = instrument_focused[:, 0], instrument_focused[:,1]
         for i in range(window_period - 1, period_mean.shape[0]):
-            # volume_not_nan = not np.isnan(volume_focused[i][0]) and not np.isnan(volume_focused[i][1])
-            # if volume_not_nan==False:
-            #     pass
-            # else:
+
             delivery_time1 = self.is_delivery_time(instrument_contract1[i], datetime_focused[i])
             delivery_time2 = self.is_delivery_time(instrument_contract2[i], datetime_focused[i])
             if delivery_time1 == True or delivery_time2 == True:
@@ -62,17 +64,20 @@ class Simulation(SimulationBasic):
         position_signal_focused[:,1] = position_signal_focused[:,1]*0.5
         position_signal_focused[0,:] = 0
         position_signal_focused[1:,:] = position_signal_focused[:-1,:]
+        position_signal_focused[-1, :] = 0
         return position_signal_focused
 
 if __name__ == '__main__':
     cta = Simulation()
-    cta.end_time =   '201808130000'
-    cta.coin_list = ['btc', 'bch','eth', 'etc', 'eos']#  'btc', 'bch','eth', 'etc', 'eos'
-    cta.weight_list = [50,50]
-    # cta.strategy_name = 'medium-'+str(cta.weight_list[0])+'-'+str(cta.weight_list[1])
+    cta.start_time = '201808100000'
+    cta.end_time =   '201808140000'
+    cta.coin_list = ['btc', 'bch','eth', 'etc','eos']#  'btc', 'bch','eth', 'etc', 'eos'
+    cta.two_contract = ['quarter','week']
     cta.strategy_name = 'medium'
-    cta.window_period_list = [5000] #
-    cta.std_num_list = [3] #2.5, 3, 3.25, 3.5, 3.75, 4
+    cta.loss_threshold = 0.01
+    cta.cool_time = 100
+    cta.window_period_list = [4500,5000,5500] #
+    cta.std_num_list = [3,3.25,3.5] #2.5, 3, 3.25, 3.5, 3.75, 4
 
     # initialize variable values
     cta.project_dir = os.path.abspath(os.path.join(os.getcwd(), ".."))
@@ -81,3 +86,6 @@ if __name__ == '__main__':
 
     # start the program
     cta.start()
+
+    cta.two_contract = ['quarter','quarter']
+    # cta.start2()
